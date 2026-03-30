@@ -1,0 +1,243 @@
+import { useState, useRef } from 'react'
+import { Upload, FileText, Check, X, Loader2, Camera, Image } from 'lucide-react'
+import { scanInvoice, confirmInvoice } from '../api'
+import { ARTE_NAVY } from './CitrusIcon'
+
+export default function InvoiceScan({ labels, onConfirmed }) {
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [scanning, setScanning] = useState(false)
+  const [result, setResult] = useState(null)
+  const [editItems, setEditItems] = useState([])
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState('')
+  const fileRef = useRef()
+  const cameraRef = useRef()
+
+  const handleFile = (f) => {
+    if (!f) return
+    setFile(f)
+    if (f.type.startsWith('image/')) {
+      setPreview(URL.createObjectURL(f))
+    } else {
+      setPreview(null)
+    }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    handleFile(e.dataTransfer.files?.[0])
+  }
+
+  const handleScan = async () => {
+    if (!file) return
+    setScanning(true)
+    setError('')
+    setResult(null)
+    try {
+      const data = await scanInvoice(file)
+      setResult(data)
+      setEditItems(
+        (data.items || []).map((item, i) => ({
+          ...item,
+          _id: i,
+          _enabled: true,
+          matched_item_code: item.matched_item_code || '',
+        }))
+      )
+    } catch (e) {
+      setError(e.message)
+    }
+    setScanning(false)
+  }
+
+  const updateItem = (idx, field, value) => {
+    setEditItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+    )
+  }
+
+  const handleConfirm = async () => {
+    setConfirming(true)
+    setError('')
+    const items = editItems
+      .filter((i) => i._enabled && i.matched_item_code)
+      .map((i) => ({
+        matched_item_code: i.matched_item_code,
+        quantity_bottles: parseInt(i.quantity_bottles) || 0,
+        description: i.description || '',
+      }))
+    try {
+      await confirmInvoice(items, result?.invoice_number || '')
+      onConfirmed()
+      setResult(null)
+      setEditItems([])
+      setFile(null)
+      setPreview(null)
+    } catch (e) {
+      setError(e.message)
+    }
+    setConfirming(false)
+  }
+
+  const reset = () => {
+    setFile(null)
+    setPreview(null)
+    setResult(null)
+    setEditItems([])
+    setError('')
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Upload / Camera area */}
+      {!file && (
+        <div className="space-y-3">
+          {/* Camera button — primary on mobile */}
+          <button
+            onClick={() => cameraRef.current?.click()}
+            className="w-full py-5 rounded-2xl border-2 border-dashed border-orange-300 bg-orange-50/50 hover:bg-orange-50 transition-all flex flex-col items-center gap-2"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-orange-100 flex items-center justify-center">
+              <Camera size={28} className="text-orange-500" />
+            </div>
+            <span className="font-semibold text-stone-700">Scan with Phone Camera</span>
+            <span className="text-xs text-stone-400">Take a photo of the invoice</span>
+          </button>
+          {/* Hidden camera input — opens native camera on mobile */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => handleFile(e.target.files?.[0])}
+            className="hidden"
+          />
+
+          {/* File upload — secondary */}
+          <div
+            className="border-2 border-dashed border-stone-300 rounded-2xl p-6 text-center cursor-pointer hover:border-stone-400 transition-all"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+          >
+            <input ref={fileRef} type="file" accept="image/*,.pdf" onChange={(e) => handleFile(e.target.files?.[0])} className="hidden" />
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center">
+                <Image size={20} className="text-stone-400" />
+              </div>
+              <div className="text-left">
+                <p className="font-medium text-stone-600 text-sm">Upload File</p>
+                <p className="text-xs text-stone-400">JPG, PNG, PDF — max 20MB</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview */}
+      {file && !result && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
+            {preview && (
+              <div className="relative">
+                <img src={preview} alt="Invoice preview" className="w-full max-h-80 object-contain bg-stone-50" />
+                <button onClick={reset} className="absolute top-3 right-3 p-2 bg-white rounded-xl shadow-md hover:bg-stone-50 transition">
+                  <X size={16} className="text-stone-500" />
+                </button>
+              </div>
+            )}
+            {!preview && (
+              <div className="p-5 flex items-center gap-3">
+                <FileText size={24} className="text-orange-500" />
+                <div>
+                  <p className="font-medium text-stone-800 text-sm">{file.name}</p>
+                  <p className="text-xs text-stone-400">{(file.size / 1024).toFixed(0)} KB</p>
+                </div>
+                <button onClick={reset} className="ml-auto p-2 hover:bg-stone-100 rounded-xl transition">
+                  <X size={16} className="text-stone-400" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={handleScan}
+            disabled={scanning}
+            className="w-full py-3.5 text-white rounded-xl font-bold flex items-center justify-center gap-2.5 transition disabled:opacity-50 shadow-sm"
+            style={{ backgroundColor: ARTE_NAVY }}
+          >
+            {scanning ? (
+              <><Loader2 size={18} className="animate-spin" /> Scanning with AI...</>
+            ) : (
+              <><FileText size={18} /> Scan Invoice</>
+            )}
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-red-600 text-sm bg-red-50 p-4 rounded-xl border border-red-100">{error}</p>}
+
+      {/* Results */}
+      {result && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-sm flex-1">
+              <div className="flex items-center gap-5 text-sm text-stone-500">
+                {result.invoice_number && <span>Invoice <strong className="text-stone-800">#{result.invoice_number}</strong></span>}
+                {result.supplier && <span>Supplier <strong className="text-stone-800">{result.supplier}</strong></span>}
+                {result.invoice_date && <span>Date <strong className="text-stone-800">{result.invoice_date}</strong></span>}
+              </div>
+            </div>
+            <button onClick={reset} className="ml-3 p-2.5 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition shadow-sm">
+              <X size={16} className="text-stone-400" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {editItems.map((item, idx) => (
+              <div key={idx}
+                className={`bg-white rounded-2xl p-4 border shadow-sm transition ${item._enabled ? 'border-stone-200' : 'border-stone-100 opacity-50'}`}>
+                <div className="flex items-start gap-3">
+                  <button onClick={() => updateItem(idx, '_enabled', !item._enabled)}
+                    className={`mt-1 p-1.5 rounded-lg transition ${item._enabled ? 'bg-emerald-500 text-white' : 'bg-stone-200 text-stone-400'}`}>
+                    {item._enabled ? <Check size={14} /> : <X size={14} />}
+                  </button>
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="md:col-span-2">
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Description</label>
+                      <p className="text-sm text-stone-700">{item.description}</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Qty</label>
+                      <input type="number" value={item.quantity_bottles || 0}
+                        onChange={(e) => updateItem(idx, 'quantity_bottles', e.target.value)}
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Match</label>
+                      <select value={item.matched_item_code}
+                        onChange={(e) => updateItem(idx, 'matched_item_code', e.target.value)}
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+                        <option value="">— select —</option>
+                        {labels.map((l) => (
+                          <option key={l.item_code} value={l.item_code}>{l.label_name} ({l.item_code})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={handleConfirm}
+            disabled={confirming || editItems.filter((i) => i._enabled && i.matched_item_code).length === 0}
+            className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2.5 transition disabled:opacity-50 shadow-sm">
+            {confirming ? <><Loader2 size={18} className="animate-spin" /> Posting...</> : <><Check size={18} /> Post to Inventory</>}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
