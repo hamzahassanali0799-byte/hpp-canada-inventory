@@ -80,26 +80,23 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       {/* Main category tabs + total */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 overflow-x-auto scrollbar-hide">
-          <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white shadow-sm">
-            {MAIN_TABS.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => switchTab(key)}
-                className={`px-2.5 py-2 text-[9px] font-bold uppercase tracking-wide transition flex items-center gap-1 whitespace-nowrap ${
-                  category === key ? 'text-white' : 'text-stone-400'
-                }`}
-                style={category === key ? { backgroundColor: ARTE_NAVY } : {}}
-              >
-                <Icon size={10} className="hidden sm:block" />
-                {label}
-              </button>
-            ))}
-          </div>
+      <div className="flex items-center gap-1.5">
+        <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white shadow-sm flex-1">
+          {MAIN_TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => switchTab(key)}
+              className={`flex-1 py-2 text-[9px] font-bold uppercase tracking-wide transition whitespace-nowrap ${
+                category === key ? 'text-white' : 'text-stone-400'
+              }`}
+              style={category === key ? { backgroundColor: ARTE_NAVY } : {}}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        <div className="bg-white rounded-lg border border-stone-200 px-2 py-1.5 shadow-sm flex-shrink-0">
-          <span className="text-[8px] text-stone-400 uppercase tracking-wider font-bold block leading-none">Total</span>
+        <div className="bg-white rounded-lg border border-stone-200 px-2 py-1.5 shadow-sm flex-shrink-0 text-center">
+          <span className="text-[7px] text-stone-400 uppercase tracking-wider font-bold block leading-none">Total</span>
           <span className="text-sm font-bold" style={{ color: ARTE_NAVY }}>{totalUnits}</span>
         </div>
       </div>
