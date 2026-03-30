@@ -30,9 +30,12 @@ export default function App() {
       <aside className={`fixed md:static inset-y-0 left-0 z-40 w-60 bg-white border-r border-stone-200 flex flex-col transition-transform duration-200 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
-        <div className="p-5 border-b border-stone-100">
-          <h1 className="text-lg font-bold tracking-tight" style={{ color: ARTE_NAVY }}>HPP Canada</h1>
-          <p className="text-[10px] text-stone-400 mt-0.5 uppercase tracking-[0.2em] font-bold">Inventory</p>
+        <div className="p-4 border-b border-stone-100 flex items-center gap-3">
+          <img src="/hpp-logo.png" alt="HPP Canada" className="h-10 w-10 object-contain" />
+          <div>
+            <h1 className="text-sm font-bold tracking-tight" style={{ color: ARTE_NAVY }}>HPP Canada</h1>
+            <p className="text-[9px] text-stone-400 uppercase tracking-[0.2em] font-bold">Inventory</p>
+          </div>
         </div>
 
         <nav className="flex-1 p-3 space-y-1">
