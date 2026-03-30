@@ -82,25 +82,25 @@ export default function Dashboard() {
       {/* Main category tabs + total */}
       <div className="flex items-center gap-2">
         <div className="flex-1 overflow-x-auto scrollbar-hide">
-          <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm w-max">
+          <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white shadow-sm">
             {MAIN_TABS.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => switchTab(key)}
-                className={`px-3 md:px-5 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 whitespace-nowrap ${
-                  category === key ? 'text-white' : 'text-stone-400 hover:text-stone-600'
+                className={`px-2.5 py-2 text-[9px] font-bold uppercase tracking-wide transition flex items-center gap-1 whitespace-nowrap ${
+                  category === key ? 'text-white' : 'text-stone-400'
                 }`}
                 style={category === key ? { backgroundColor: ARTE_NAVY } : {}}
               >
-                <Icon size={12} />
+                <Icon size={10} className="hidden sm:block" />
                 {label}
               </button>
             ))}
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-stone-200 px-3 py-2 shadow-sm flex-shrink-0">
-          <span className="text-[9px] text-stone-400 uppercase tracking-widest font-bold">Total: </span>
-          <span className="text-base font-bold" style={{ color: ARTE_NAVY }}>{totalUnits}</span>
+        <div className="bg-white rounded-lg border border-stone-200 px-2 py-1.5 shadow-sm flex-shrink-0">
+          <span className="text-[8px] text-stone-400 uppercase tracking-wider font-bold block leading-none">Total</span>
+          <span className="text-sm font-bold" style={{ color: ARTE_NAVY }}>{totalUnits}</span>
         </div>
       </div>
 
@@ -154,26 +154,26 @@ export default function Dashboard() {
       </div>
 
       {/* Search + Add */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <div className="flex-1 relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search..."
-            className="w-full bg-white border border-stone-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 transition shadow-sm"
+            className="w-full bg-white border border-stone-200 rounded-lg pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-300 transition shadow-sm"
           />
         </div>
         <button onClick={load}
-          className="p-2 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition shadow-sm">
-          <RefreshCw size={14} className={`text-stone-500 ${loading ? 'animate-spin' : ''}`} />
+          className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition shadow-sm">
+          <RefreshCw size={12} className={`text-stone-500 ${loading ? 'animate-spin' : ''}`} />
         </button>
         <button
           onClick={() => { setEditLabel(null); setShowAdd(true) }}
-          className="px-3 py-2 rounded-xl font-bold text-sm flex items-center gap-1.5 transition shadow-sm text-white whitespace-nowrap"
+          className="px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-sm text-white whitespace-nowrap"
           style={{ backgroundColor: ARTE_NAVY }}
         >
-          <Plus size={14} /> Add
+          <Plus size={12} /> Add
         </button>
       </div>
 
