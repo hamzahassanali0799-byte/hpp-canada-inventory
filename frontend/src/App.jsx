@@ -81,7 +81,7 @@ export default function App() {
       )}
 
       {/* Main */}
-      <main className="flex-1 p-6 md:p-8 overflow-auto">
+      <main className="flex-1 p-3 pt-14 md:pt-8 md:p-8 overflow-auto">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/scan" element={<ScanPage />} />

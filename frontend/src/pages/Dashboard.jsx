@@ -78,96 +78,99 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-5">
-      {/* Main category tabs */}
-      <div className="flex items-center gap-3">
-        <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm">
-          {MAIN_TABS.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => switchTab(key)}
-              className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition flex items-center gap-2 ${
-                category === key ? 'text-white' : 'text-stone-400 hover:text-stone-600'
-              }`}
-              style={category === key ? { backgroundColor: ARTE_NAVY } : {}}
-            >
-              <Icon size={14} />
-              {label}
-            </button>
-          ))}
+    <div className="space-y-4">
+      {/* Main category tabs + total */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 overflow-x-auto scrollbar-hide">
+          <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm w-max">
+            {MAIN_TABS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => switchTab(key)}
+                className={`px-3 md:px-5 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 whitespace-nowrap ${
+                  category === key ? 'text-white' : 'text-stone-400 hover:text-stone-600'
+                }`}
+                style={category === key ? { backgroundColor: ARTE_NAVY } : {}}
+              >
+                <Icon size={12} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex-1" />
-        <div className="bg-white rounded-xl border border-stone-200 px-4 py-2.5 shadow-sm">
-          <span className="text-[10px] text-stone-400 uppercase tracking-widest font-bold">Total: </span>
-          <span className="text-lg font-bold" style={{ color: ARTE_NAVY }}>{totalUnits}</span>
+        <div className="bg-white rounded-xl border border-stone-200 px-3 py-2 shadow-sm flex-shrink-0">
+          <span className="text-[9px] text-stone-400 uppercase tracking-widest font-bold">Total: </span>
+          <span className="text-base font-bold" style={{ color: ARTE_NAVY }}>{totalUnits}</span>
         </div>
       </div>
 
       {/* Size sub-tabs + brand filter */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Size tabs */}
-        {sizes.length > 1 && (
-          <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white">
-            <button
-              onClick={() => setSizeFilter('')}
-              className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition ${
-                !sizeFilter ? 'bg-stone-800 text-white' : 'text-stone-400'
-              }`}
-            >All Sizes</button>
-            {sizes.map((s) => (
+      <div className="overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-2 w-max">
+          {/* Size tabs */}
+          {sizes.length > 1 && (
+            <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white">
               <button
-                key={s}
-                onClick={() => setSizeFilter(s)}
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition ${
-                  sizeFilter === s ? 'bg-stone-800 text-white' : 'text-stone-400'
+                onClick={() => setSizeFilter('')}
+                className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap ${
+                  !sizeFilter ? 'bg-stone-800 text-white' : 'text-stone-400'
                 }`}
-              >{s}</button>
-            ))}
-          </div>
-        )}
+              >All Sizes</button>
+              {sizes.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSizeFilter(s)}
+                  className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap ${
+                    sizeFilter === s ? 'bg-stone-800 text-white' : 'text-stone-400'
+                  }`}
+                >{s}</button>
+              ))}
+            </div>
+          )}
 
-        {/* Brand filter */}
-        {brands.length > 1 && (
-          <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white">
-            <button
-              onClick={() => setBrandFilter('')}
-              className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition ${
-                !brandFilter ? 'bg-stone-800 text-white' : 'text-stone-400'
-              }`}
-            >All Brands</button>
-            {brands.map((b) => (
+          {/* Brand filter */}
+          {brands.length > 1 && (
+            <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white">
               <button
-                key={b}
-                onClick={() => setBrandFilter(b)}
-                className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition"
-                style={brandFilter === b
-                  ? { backgroundColor: getBrandColor(b), color: 'white' }
-                  : { color: '#a8a29e' }
-                }
-              >{b}</button>
-            ))}
-          </div>
-        )}
+                onClick={() => setBrandFilter('')}
+                className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap ${
+                  !brandFilter ? 'bg-stone-800 text-white' : 'text-stone-400'
+                }`}
+              >All Brands</button>
+              {brands.map((b) => (
+                <button
+                  key={b}
+                  onClick={() => setBrandFilter(b)}
+                  className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap"
+                  style={brandFilter === b
+                    ? { backgroundColor: getBrandColor(b), color: 'white' }
+                    : { color: '#a8a29e' }
+                  }
+                >{b}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Search + Add */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <div className="flex-1 relative">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by flavor or item code..."
-            className="w-full bg-white border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 transition shadow-sm"
+            placeholder="Search..."
+            className="w-full bg-white border border-stone-200 rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 transition shadow-sm"
           />
         </div>
         <button onClick={load}
-          className="p-2.5 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition shadow-sm">
+          className="p-2 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition shadow-sm">
           <RefreshCw size={14} className={`text-stone-500 ${loading ? 'animate-spin' : ''}`} />
         </button>
         <button
           onClick={() => { setEditLabel(null); setShowAdd(true) }}
-          className="px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition shadow-sm text-white"
+          className="px-3 py-2 rounded-xl font-bold text-sm flex items-center gap-1.5 transition shadow-sm text-white whitespace-nowrap"
           style={{ backgroundColor: ARTE_NAVY }}
         >
           <Plus size={14} /> Add
