@@ -91,6 +91,16 @@ def update_label(label_id: int, data: LabelUpdate, db: Session = Depends(get_db)
     return label.to_dict()
 
 
+@router.delete("/{label_id}")
+def delete_label(label_id: int, db: Session = Depends(get_db)):
+    label = db.query(Label).filter(Label.id == label_id).first()
+    if not label:
+        raise HTTPException(status_code=404, detail="Label not found")
+    db.delete(label)
+    db.commit()
+    return {"ok": True}
+
+
 @router.post("/{label_id}/adjust")
 def adjust_stock(label_id: int, data: StockAdjust, db: Session = Depends(get_db)):
     label = db.query(Label).filter(Label.id == label_id).first()

@@ -43,6 +43,11 @@ export async function updateLabel(id, data) {
   return res.json()
 }
 
+export async function deleteLabel(id) {
+  const res = await request(`/api/labels/${id}`, { method: 'DELETE' })
+  return res.json()
+}
+
 export async function adjustStock(id, quantity, mode = 'bottle', description = '') {
   const res = await request(`/api/labels/${id}/adjust`, {
     method: 'POST',

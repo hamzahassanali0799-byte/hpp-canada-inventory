@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Minus, Plus, Edit3, Tag, Box, Wine } from 'lucide-react'
-import { adjustStock } from '../api'
+import { Minus, Plus, Edit3, Tag, Box, Wine, Trash2 } from 'lucide-react'
+import { adjustStock, deleteLabel } from '../api'
 import BottleImage, { getCitrus, getBrandColor } from './CitrusIcon'
 
 function getShelfBadge(days) {
@@ -47,6 +47,18 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
 
   const handleManualKeyDown = (e) => {
     if (e.key === 'Enter') handleManualSet()
+  }
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete "${label.flavor}"?`)) return
+    setLoading(true)
+    try {
+      await deleteLabel(label.id)
+      onUpdate()
+    } catch (e) {
+      console.error(e)
+    }
+    setLoading(false)
   }
 
   const icon = isBox ? <Box size={20} style={{ color: c.labelColor }} />
@@ -160,7 +172,13 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
         {/* Footer */}
         <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-stone-100">
           <span className="text-[9px] font-mono text-stone-400">{label.item_code}</span>
-          <span className="text-[9px] text-stone-400">{label.location_code}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-stone-400">{label.location_code}</span>
+            <button onClick={handleDelete} disabled={loading}
+              className="p-1 rounded hover:bg-red-50 text-stone-300 hover:text-red-500 transition">
+              <Trash2 size={10} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
