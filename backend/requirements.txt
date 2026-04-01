@@ -7,3 +7,4 @@ python-dotenv==1.0.1
 aiofiles==24.1.0
 pydantic==2.9.2
 Pillow==11.1.0
+pytesseract==0.3.13
