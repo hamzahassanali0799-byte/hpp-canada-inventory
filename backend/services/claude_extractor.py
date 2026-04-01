@@ -6,34 +6,40 @@ from sqlalchemy.orm import Session
 from backend.models.label import Label
 
 
-# ── Step 1: Simple OCR prompt — LLM only reads raw numbers ──
+# ── OCR Prompt ──
 
-OCR_PROMPT = """Look at this invoice image. Read EACH line item row one by one, from top to bottom.
+OCR_PROMPT = """Read this invoice image carefully. Extract each line item row separately.
 
-For EACH row in the table, tell me exactly:
-- "no": item number column (e.g. "FG-1516")
-- "desc": full description text (copy it exactly, include the flavor/product name)
-- "qty": the quantity NUMBER (just the digits, e.g. 83)
-- "unit": what unit (e.g. "Case of 06", "Case", "Bottle")
-- "price": unit price number
-- "total": line amount number
+For EACH row in the table, give me:
+- "no": item/product number (e.g. "FG-1516")
+- "desc": full description including flavor name (e.g. "Packed product - Drink Arte, Lime, case qty6 of 1L")
+- "qty": quantity number (just the digits)
+- "unit": unit type (e.g. "Case of 06", "Case", "Bottle")
+- "price": unit price
+- "total": line amount total
 
-Also read the invoice header:
+From the header:
 - "inv": invoice/order number
-- "to": who is it addressed to / customer
-- "from": supplier company
-- "date": the date
+- "company": company name (supplier)
+- "date": invoice date
 
-IMPORTANT:
-- Each row is a SEPARATE product. Read the flavor name for each (Lime, Lemon, Orange, Grapefruit, etc.)
-- Do NOT combine or merge rows
-- The quantity on each row belongs ONLY to that row's product
+RULES:
+- Each row is a DIFFERENT product with its own flavor (Lime, Lemon, Grapefruit, Orange, etc.)
+- Do NOT merge rows together
+- Read the flavor name for each row carefully
 
 Return ONLY valid JSON:
-{"header": {"inv": "", "to": "", "from": "", "date": ""}, "rows": [{"no": "", "desc": "", "qty": 0, "unit": "", "price": 0, "total": 0}]}"""
+{"header": {"inv": "", "company": "", "date": ""}, "rows": [{"no": "", "desc": "", "qty": 0, "unit": "", "price": 0, "total": 0}]}"""
 
 
-# ── Step 2: Deterministic Python matching ──
+# ── Product Matching (deterministic Python) ──
+
+FG_CODES = {
+    "fg-1516": "ARTE-LME-1L-BTL",
+    "fg-1515": "ARTE-LMN-1L-BTL",
+    "fg-1514": "ARTE-GRF-1L-BTL",
+    "fg-1513": "ARTE-ORG-1L-BTL",
+}
 
 PRODUCT_KEYWORDS = {
     ("arte", "orange"): "ARTE-ORG-1L-BTL",
@@ -54,25 +60,14 @@ PRODUCT_KEYWORDS = {
     ("joosy", "apple", "300"): "JOOS-APL-300-BTL",
 }
 
-# FG code → item_code (from your invoices)
-FG_CODES = {
-    "fg-1516": "ARTE-LME-1L-BTL",   # Lime
-    "fg-1515": "ARTE-LMN-1L-BTL",   # Lemon
-    "fg-1514": "ARTE-GRF-1L-BTL",   # Grapefruit
-    "fg-1513": "ARTE-ORG-1L-BTL",   # Orange
-}
-
 
 def match_product(desc: str, item_no: str, labels: list[dict]) -> str | None:
-    """Match using multiple strategies — most reliable first."""
     desc_lower = desc.lower()
     item_no_lower = (item_no or "").lower().strip()
 
-    # Strategy 1: FG code mapping (most reliable — unique per product)
     if item_no_lower in FG_CODES:
         return FG_CODES[item_no_lower]
 
-    # Strategy 2: Keyword matching on description
     best_match = None
     best_score = 0
     for keywords, code in PRODUCT_KEYWORDS.items():
@@ -80,49 +75,32 @@ def match_product(desc: str, item_no: str, labels: list[dict]) -> str | None:
         if score == len(keywords) and score > best_score:
             best_match = code
             best_score = score
-
     if best_match:
         return best_match
 
-    # Strategy 3: Single flavor keyword (if brand is in desc)
-    flavors = {
-        "lime": "ARTE-LME-1L-BTL",
-        "lemon": "ARTE-LMN-1L-BTL",
-        "grapefruit": "ARTE-GRF-1L-BTL",
-        "orange": "ARTE-ORG-1L-BTL",
-        "blueberry": None,
-        "sunshine": None,
-        "tropical": None,
-        "mandarin": None,
-        "apple": None,
-    }
     if "arte" in desc_lower or "drink arte" in desc_lower:
-        for flavor, code in flavors.items():
-            if code and flavor in desc_lower:
+        for flavor, code in [("lime", "ARTE-LME-1L-BTL"), ("lemon", "ARTE-LMN-1L-BTL"),
+                              ("grapefruit", "ARTE-GRF-1L-BTL"), ("orange", "ARTE-ORG-1L-BTL")]:
+            if flavor in desc_lower:
                 return code
 
-    # Strategy 4: Fuzzy match against DB labels
     for label in labels:
         if label["category"] != "juice":
             continue
-        flavor_lower = label["flavor"].lower()
-        brand_lower = label["brand"].lower()
-        if flavor_lower in desc_lower and (brand_lower in desc_lower or brand_lower[:4] in desc_lower):
+        if label["flavor"].lower() in desc_lower and label["brand"].lower()[:4] in desc_lower:
             return label["item_code"]
 
     return None
 
 
 def calc_bottles(qty: int, unit: str, case_size: int = 6) -> int:
-    """Convert to bottles."""
     unit_lower = unit.lower()
-    if "case" in unit_lower or "cs" in unit_lower or "crate" in unit_lower:
+    if "case" in unit_lower or "cs" in unit_lower:
         return qty * case_size
     return qty
 
 
 def get_case_size(item_code: str, labels: list[dict]) -> int:
-    """Get case quantity for a matched product."""
     for label in labels:
         if label["item_code"] == item_code:
             return label.get("case_quantity", 6)
@@ -130,18 +108,15 @@ def get_case_size(item_code: str, labels: list[dict]) -> int:
 
 
 def validate_qty(qty: int, price: float, total: float) -> int:
-    """Cross-check quantity using total / price."""
     if not price or price <= 0 or not total or total <= 0:
         return qty
     calculated = round(total / price)
     if abs(calculated - qty) <= 1:
         return qty
-    # Math disagrees — trust math
     return calculated
 
 
 def process_ocr_result(raw: dict, labels: list[dict]) -> dict:
-    """Deterministic processing — no AI, pure code."""
     header = raw.get("header", {})
     rows = raw.get("rows", [])
     items = []
@@ -154,16 +129,9 @@ def process_ocr_result(raw: dict, labels: list[dict]) -> dict:
         price = float(row.get("price", 0) or 0)
         total = float(row.get("total", 0) or 0)
 
-        # Validate quantity with math
         qty = validate_qty(qty, price, total)
-
-        # Match product
         matched_code = match_product(desc, item_no, labels)
-
-        # Get case size
         case_size = get_case_size(matched_code, labels) if matched_code else 6
-
-        # Convert to bottles
         bottles = calc_bottles(qty, unit, case_size)
 
         items.append({
@@ -177,45 +145,65 @@ def process_ocr_result(raw: dict, labels: list[dict]) -> dict:
     return {
         "items": items,
         "invoice_number": header.get("inv") or "",
-        "supplier": header.get("from") or header.get("to") or "",
+        "supplier": header.get("company") or "",
         "invoice_date": header.get("date") or "",
     }
 
 
-# ── Main ──
+# ── Vision API call — tries Gemini first, falls back to Groq ──
 
-async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> dict:
-    groq_key = os.getenv("GROQ_API_KEY")
-    if not groq_key:
-        raise ValueError("GROQ_API_KEY not set — add it to your .env file")
+async def _call_gemini(b64: str, media_type: str) -> str:
+    """Google Gemini Flash 2.0 — free, excellent OCR."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return None
 
-    labels = [l.to_dict() for l in db.query(Label).all()]
-    b64 = base64.standard_b64encode(file_bytes).decode("utf-8")
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        resp = await client.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [{
+                    "parts": [
+                        {"text": OCR_PROMPT},
+                        {"inline_data": {"mime_type": media_type, "data": b64}},
+                    ]
+                }],
+                "generationConfig": {"temperature": 0.0, "maxOutputTokens": 2000},
+            },
+        )
 
-    supported_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-    media_type = content_type if content_type in supported_types else "image/jpeg"
+    if resp.status_code != 200:
+        return None
+
+    data = resp.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (KeyError, IndexError):
+        return None
+
+
+async def _call_groq(b64: str, media_type: str) -> str:
+    """Groq Llama 4 Scout — free fallback."""
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise ValueError("No vision API keys configured (need GEMINI_API_KEY or GROQ_API_KEY)")
 
     async with httpx.AsyncClient(timeout=90.0) as client:
         resp = await client.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {groq_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
                 "model": "meta-llama/llama-4-scout-17b-16e-instruct",
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are an OCR reader. Read text from invoice images exactly as written. Each table row is a separate product — never combine rows. Output only JSON.",
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": OCR_PROMPT},
-                            {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
-                        ],
-                    }
+                    {"role": "system", "content": "You are an OCR reader. Read invoice images exactly. Each row is a separate product. Output only JSON."},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": OCR_PROMPT},
+                        {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                    ]},
                 ],
                 "max_tokens": 2000,
                 "temperature": 0.0,
@@ -223,16 +211,23 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
         )
 
     if resp.status_code != 200:
-        error_detail = resp.text
-        try:
-            err_json = resp.json()
-            error_detail = err_json.get("error", {}).get("message", error_detail)
-        except Exception:
-            pass
-        raise ValueError(f"Vision API error ({resp.status_code}): {error_detail}")
+        raise ValueError(f"Groq API error ({resp.status_code}): {resp.text[:200]}")
 
     data = resp.json()
-    response_text = data["choices"][0]["message"]["content"].strip()
+    return data["choices"][0]["message"]["content"].strip()
+
+
+async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> dict:
+    labels = [l.to_dict() for l in db.query(Label).all()]
+    b64 = base64.standard_b64encode(file_bytes).decode("utf-8")
+
+    supported_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    media_type = content_type if content_type in supported_types else "image/jpeg"
+
+    # Try Gemini first (better OCR), fall back to Groq
+    response_text = await _call_gemini(b64, media_type)
+    if not response_text:
+        response_text = await _call_groq(b64, media_type)
 
     # Strip markdown fences
     if response_text.startswith("```"):
