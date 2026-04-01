@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Upload, FileText, Check, X, Loader2, Camera, Image } from 'lucide-react'
+import { Upload, FileText, Check, X, Loader2, Camera, Image, RotateCcw, AlertTriangle } from 'lucide-react'
 import { scanInvoice, confirmInvoice } from '../api'
 import { ARTE_NAVY } from './CitrusIcon'
 
@@ -11,12 +11,16 @@ export default function InvoiceScan({ labels, onConfirmed }) {
   const [editItems, setEditItems] = useState([])
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
+  const [retryCount, setRetryCount] = useState(0)
+  const [mode, setMode] = useState('add') // 'add' or 'remove'
   const fileRef = useRef()
   const cameraRef = useRef()
 
   const handleFile = (f) => {
     if (!f) return
     setFile(f)
+    setError('')
+    setRetryCount(0)
     if (f.type.startsWith('image/')) {
       setPreview(URL.createObjectURL(f))
     } else {
@@ -34,20 +38,36 @@ export default function InvoiceScan({ labels, onConfirmed }) {
     setScanning(true)
     setError('')
     setResult(null)
-    try {
-      const data = await scanInvoice(file)
-      setResult(data)
-      setEditItems(
-        (data.items || []).map((item, i) => ({
-          ...item,
-          _id: i,
-          _enabled: true,
-          matched_item_code: item.matched_item_code || '',
-        }))
-      )
-    } catch (e) {
-      setError(e.message)
+
+    // Retry up to 3 times on failure
+    let lastError = ''
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const data = await scanInvoice(file)
+        if (data.items && data.items.length > 0) {
+          setResult(data)
+          setEditItems(
+            data.items.map((item, i) => ({
+              ...item,
+              _id: i,
+              _enabled: true,
+              matched_item_code: item.matched_item_code || '',
+            }))
+          )
+          setRetryCount(attempt)
+          setScanning(false)
+          return
+        }
+        lastError = 'No items detected in invoice. Try a clearer photo.'
+      } catch (e) {
+        lastError = e.message
+      }
+      // Wait 1s before retry
+      if (attempt < 2) await new Promise(r => setTimeout(r, 1000))
     }
+
+    setError(lastError)
+    setRetryCount(3)
     setScanning(false)
   }
 
@@ -60,12 +80,13 @@ export default function InvoiceScan({ labels, onConfirmed }) {
   const handleConfirm = async () => {
     setConfirming(true)
     setError('')
+    const multiplier = mode === 'remove' ? -1 : 1
     const items = editItems
       .filter((i) => i._enabled && i.matched_item_code)
       .map((i) => ({
         matched_item_code: i.matched_item_code,
-        quantity_bottles: parseInt(i.quantity_bottles) || 0,
-        description: i.description || '',
+        quantity_bottles: (parseInt(i.quantity_bottles) || 0) * multiplier,
+        description: `${mode === 'remove' ? 'REMOVED: ' : ''}${i.description || ''}`,
       }))
     try {
       await confirmInvoice(items, result?.invoice_number || '')
@@ -74,6 +95,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
       setEditItems([])
       setFile(null)
       setPreview(null)
+      setMode('add')
     } catch (e) {
       setError(e.message)
     }
@@ -86,10 +108,42 @@ export default function InvoiceScan({ labels, onConfirmed }) {
     setResult(null)
     setEditItems([])
     setError('')
+    setRetryCount(0)
+  }
+
+  const retakePhoto = () => {
+    setFile(null)
+    setPreview(null)
+    setError('')
+    setRetryCount(0)
+    setResult(null)
+    setEditItems([])
+    // Open camera immediately
+    setTimeout(() => cameraRef.current?.click(), 100)
   }
 
   return (
     <div className="space-y-6">
+      {/* Add / Remove toggle */}
+      <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm">
+        <button
+          onClick={() => setMode('add')}
+          className={`flex-1 py-2.5 text-sm font-bold uppercase tracking-wide transition ${
+            mode === 'add' ? 'bg-emerald-500 text-white' : 'text-stone-400 hover:text-stone-600'
+          }`}
+        >
+          + Add Stock
+        </button>
+        <button
+          onClick={() => setMode('remove')}
+          className={`flex-1 py-2.5 text-sm font-bold uppercase tracking-wide transition ${
+            mode === 'remove' ? 'bg-red-500 text-white' : 'text-stone-400 hover:text-stone-600'
+          }`}
+        >
+          − Remove Stock
+        </button>
+      </div>
+
       {/* Upload / Camera area */}
       {!file && (
         <div className="space-y-3">
@@ -101,7 +155,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
               <Camera size={28} className="text-orange-500" />
             </div>
             <span className="font-semibold text-stone-700">Scan with Phone Camera</span>
-            <span className="text-xs text-stone-400">Take a photo of the invoice</span>
+            <span className="text-xs text-stone-400">Take a clear, well-lit photo</span>
           </button>
           <input
             ref={cameraRef}
@@ -133,7 +187,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
       )}
 
       {/* Preview */}
-      {file && !result && (
+      {file && !result && !error && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
             {preview && (
@@ -165,7 +219,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             style={{ backgroundColor: ARTE_NAVY }}
           >
             {scanning ? (
-              <><Loader2 size={18} className="animate-spin" /> Scanning invoice...</>
+              <><Loader2 size={18} className="animate-spin" /> Scanning invoice (auto-retries)...</>
             ) : (
               <><FileText size={18} /> Scan Invoice</>
             )}
@@ -173,11 +227,55 @@ export default function InvoiceScan({ labels, onConfirmed }) {
         </div>
       )}
 
-      {error && <p className="text-red-600 text-sm bg-red-50 p-4 rounded-xl border border-red-100">{error}</p>}
+      {/* Error with retake option */}
+      {error && (
+        <div className="space-y-3">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-red-700 text-sm font-medium">{error}</p>
+                <p className="text-red-400 text-xs mt-1">
+                  Tip: Make sure the invoice is flat, well-lit, and text is readable
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={retakePhoto}
+              className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition shadow-sm"
+            >
+              <Camera size={18} /> Retake Photo
+            </button>
+            <button
+              onClick={() => { setError(''); handleScan() }}
+              disabled={scanning}
+              className="flex-1 py-3 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition shadow-sm disabled:opacity-50"
+              style={{ backgroundColor: ARTE_NAVY }}
+            >
+              <RotateCcw size={18} /> Try Again
+            </button>
+          </div>
+
+          <button onClick={reset}
+            className="w-full py-2.5 bg-white border border-stone-200 rounded-xl text-stone-500 text-sm font-medium hover:bg-stone-50 transition">
+            Cancel
+          </button>
+        </div>
+      )}
 
       {/* Results */}
       {result && (
         <div className="space-y-4">
+          {/* Mode indicator */}
+          <div className={`rounded-xl px-4 py-2.5 text-sm font-bold text-center ${
+            mode === 'remove' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+          }`}>
+            {mode === 'remove' ? '− Removing stock from inventory' : '+ Adding stock to inventory'}
+          </div>
+
           {/* Invoice header info */}
           <div className="flex items-center justify-between">
             <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-sm flex-1">
@@ -213,7 +311,6 @@ export default function InvoiceScan({ labels, onConfirmed }) {
               <div key={idx}
                 className={`bg-white rounded-2xl p-4 border shadow-sm transition ${item._enabled ? 'border-stone-200' : 'border-stone-100 opacity-50'}`}>
 
-                {/* Enable toggle + Description */}
                 <div className="flex items-start gap-3 mb-3">
                   <button onClick={() => updateItem(idx, '_enabled', !item._enabled)}
                     className={`mt-0.5 p-1.5 rounded-lg transition ${item._enabled ? 'bg-emerald-500 text-white' : 'bg-stone-200 text-stone-400'}`}>
@@ -225,9 +322,8 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                   </div>
                 </div>
 
-                {/* Qty row: cases, bottles, unit price */}
                 <div className="grid grid-cols-3 gap-3 mb-3">
-                  {item.quantity_cases && (
+                  {item.quantity_cases != null && (
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Cases</label>
                       <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-700">
@@ -241,7 +337,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                       onChange={(e) => updateItem(idx, 'quantity_bottles', e.target.value)}
                       className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-300" />
                   </div>
-                  {item.unit_price && (
+                  {item.unit_price != null && (
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Unit Price</label>
                       <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-600">
@@ -251,7 +347,6 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                   )}
                 </div>
 
-                {/* Product match dropdown */}
                 <div>
                   <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Match Product</label>
                   <select value={item.matched_item_code}
@@ -271,8 +366,16 @@ export default function InvoiceScan({ labels, onConfirmed }) {
 
           <button onClick={handleConfirm}
             disabled={confirming || editItems.filter((i) => i._enabled && i.matched_item_code).length === 0}
-            className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2.5 transition disabled:opacity-50 shadow-sm">
-            {confirming ? <><Loader2 size={18} className="animate-spin" /> Posting...</> : <><Check size={18} /> Post to Inventory</>}
+            className={`w-full py-3.5 text-white rounded-xl font-bold flex items-center justify-center gap-2.5 transition disabled:opacity-50 shadow-sm ${
+              mode === 'remove' ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'
+            }`}>
+            {confirming ? (
+              <><Loader2 size={18} className="animate-spin" /> Posting...</>
+            ) : mode === 'remove' ? (
+              <><Check size={18} /> Remove from Inventory</>
+            ) : (
+              <><Check size={18} /> Add to Inventory</>
+            )}
           </button>
         </div>
       )}

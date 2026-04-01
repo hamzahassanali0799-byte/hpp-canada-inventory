@@ -52,6 +52,9 @@ def confirm_items(payload: ConfirmPayload, db: Session = Depends(get_db)):
             continue
 
         label.current_stock_bottles += item.quantity_bottles
+        # Prevent negative stock
+        if label.current_stock_bottles < 0:
+            label.current_stock_bottles = 0
         db.commit()
         db.refresh(label)
 
@@ -59,11 +62,13 @@ def confirm_items(payload: ConfirmPayload, db: Session = Depends(get_db)):
         if payload.invoice_number:
             desc += f" — Invoice #{payload.invoice_number}"
 
+        entry_type = "Positive Adjmt." if item.quantity_bottles >= 0 else "Negative Adjmt."
+
         create_journal_entry(
             db=db,
             item_no=label.item_code,
             location_code=label.location_code,
-            entry_type="Positive Adjmt.",
+            entry_type=entry_type,
             quantity=item.quantity_bottles,
             description=desc,
             posting_date=date.today().isoformat(),
