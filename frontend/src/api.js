@@ -63,10 +63,17 @@ export async function adjustStock(id, quantity, mode = 'bottle', description = '
 export async function scanInvoice(file) {
   const form = new FormData()
   form.append('file', file)
-  const res = await request('/api/invoice/scan', {
+  // Call Render backend directly to avoid Vercel's 30s proxy timeout
+  const SCAN_URL = import.meta.env.VITE_SCAN_URL || 'https://hpp-canada-inventory.onrender.com'
+  const res = await fetch(`${SCAN_URL}/api/invoice/scan`, {
     method: 'POST',
+    headers: { 'X-API-Key': API_KEY },
     body: form,
   })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Scan failed')
+  }
   return res.json()
 }
 
