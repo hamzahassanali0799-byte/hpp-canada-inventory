@@ -93,7 +93,6 @@ export default function InvoiceScan({ labels, onConfirmed }) {
       {/* Upload / Camera area */}
       {!file && (
         <div className="space-y-3">
-          {/* Camera button — primary on mobile */}
           <button
             onClick={() => cameraRef.current?.click()}
             className="w-full py-5 rounded-2xl border-2 border-dashed border-orange-300 bg-orange-50/50 hover:bg-orange-50 transition-all flex flex-col items-center gap-2"
@@ -104,7 +103,6 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             <span className="font-semibold text-stone-700">Scan with Phone Camera</span>
             <span className="text-xs text-stone-400">Take a photo of the invoice</span>
           </button>
-          {/* Hidden camera input — opens native camera on mobile */}
           <input
             ref={cameraRef}
             type="file"
@@ -114,7 +112,6 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             className="hidden"
           />
 
-          {/* File upload — secondary */}
           <div
             className="border-2 border-dashed border-stone-300 rounded-2xl p-6 text-center cursor-pointer hover:border-stone-400 transition-all"
             onClick={() => fileRef.current?.click()}
@@ -168,7 +165,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             style={{ backgroundColor: ARTE_NAVY }}
           >
             {scanning ? (
-              <><Loader2 size={18} className="animate-spin" /> Scanning with AI...</>
+              <><Loader2 size={18} className="animate-spin" /> Scanning invoice...</>
             ) : (
               <><FileText size={18} /> Scan Invoice</>
             )}
@@ -181,12 +178,28 @@ export default function InvoiceScan({ labels, onConfirmed }) {
       {/* Results */}
       {result && (
         <div className="space-y-4">
+          {/* Invoice header info */}
           <div className="flex items-center justify-between">
             <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-sm flex-1">
-              <div className="flex items-center gap-5 text-sm text-stone-500">
-                {result.invoice_number && <span>Invoice <strong className="text-stone-800">#{result.invoice_number}</strong></span>}
-                {result.supplier && <span>Supplier <strong className="text-stone-800">{result.supplier}</strong></span>}
-                {result.invoice_date && <span>Date <strong className="text-stone-800">{result.invoice_date}</strong></span>}
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                {result.invoice_number && (
+                  <div>
+                    <span className="text-[10px] text-stone-400 uppercase tracking-wider font-bold block">Invoice</span>
+                    <span className="font-bold text-stone-800">#{result.invoice_number}</span>
+                  </div>
+                )}
+                {result.supplier && (
+                  <div>
+                    <span className="text-[10px] text-stone-400 uppercase tracking-wider font-bold block">Supplier</span>
+                    <span className="font-bold text-stone-800">{result.supplier}</span>
+                  </div>
+                )}
+                {result.invoice_date && (
+                  <div>
+                    <span className="text-[10px] text-stone-400 uppercase tracking-wider font-bold block">Date</span>
+                    <span className="font-bold text-stone-800">{result.invoice_date}</span>
+                  </div>
+                )}
               </div>
             </div>
             <button onClick={reset} className="ml-3 p-2.5 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition shadow-sm">
@@ -194,38 +207,63 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             </button>
           </div>
 
+          {/* Item rows */}
           <div className="space-y-3">
             {editItems.map((item, idx) => (
               <div key={idx}
                 className={`bg-white rounded-2xl p-4 border shadow-sm transition ${item._enabled ? 'border-stone-200' : 'border-stone-100 opacity-50'}`}>
-                <div className="flex items-start gap-3">
+
+                {/* Enable toggle + Description */}
+                <div className="flex items-start gap-3 mb-3">
                   <button onClick={() => updateItem(idx, '_enabled', !item._enabled)}
-                    className={`mt-1 p-1.5 rounded-lg transition ${item._enabled ? 'bg-emerald-500 text-white' : 'bg-stone-200 text-stone-400'}`}>
+                    className={`mt-0.5 p-1.5 rounded-lg transition ${item._enabled ? 'bg-emerald-500 text-white' : 'bg-stone-200 text-stone-400'}`}>
                     {item._enabled ? <Check size={14} /> : <X size={14} />}
                   </button>
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="md:col-span-2">
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Description</label>
-                      <p className="text-sm text-stone-700">{item.description}</p>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Qty</label>
-                      <input type="number" value={item.quantity_bottles || 0}
-                        onChange={(e) => updateItem(idx, 'quantity_bottles', e.target.value)}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Match</label>
-                      <select value={item.matched_item_code}
-                        onChange={(e) => updateItem(idx, 'matched_item_code', e.target.value)}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
-                        <option value="">— select —</option>
-                        {labels.map((l) => (
-                          <option key={l.item_code} value={l.item_code}>{l.label_name} ({l.item_code})</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Description</label>
+                    <p className="text-sm font-medium text-stone-800">{item.description}</p>
                   </div>
+                </div>
+
+                {/* Qty row: cases, bottles, unit price */}
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {item.quantity_cases && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Cases</label>
+                      <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-700">
+                        {item.quantity_cases}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Bottles</label>
+                    <input type="number" value={item.quantity_bottles || 0}
+                      onChange={(e) => updateItem(idx, 'quantity_bottles', e.target.value)}
+                      className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  </div>
+                  {item.unit_price && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Unit Price</label>
+                      <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-600">
+                        ${item.unit_price}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Product match dropdown */}
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Match Product</label>
+                  <select value={item.matched_item_code}
+                    onChange={(e) => updateItem(idx, 'matched_item_code', e.target.value)}
+                    className={`w-full border rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-300 ${
+                      item.matched_item_code ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-700'
+                    }`}>
+                    <option value="">— select product —</option>
+                    {labels.map((l) => (
+                      <option key={l.item_code} value={l.item_code}>{l.label_name} ({l.item_code})</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             ))}
