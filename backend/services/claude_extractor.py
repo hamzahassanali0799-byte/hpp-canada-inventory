@@ -1,45 +1,40 @@
 import base64
 import json
 import os
-import re
 import httpx
 from sqlalchemy.orm import Session
 from backend.models.label import Label
 
 
-# ── Step 1: Simple OCR prompt — LLM only reads text, no math ──
+# ── Step 1: Simple OCR prompt — LLM only reads raw numbers ──
 
-OCR_PROMPT = """Read this invoice image. Extract EACH line item row exactly as written.
+OCR_PROMPT = """Look at this invoice image. Read EACH line item row one by one, from top to bottom.
 
-For each row, give me:
-- "no": the item number (e.g. "FG-1516")
-- "desc": the product description text exactly as written
-- "qty_num": the NUMBER shown in the quantity column (just the number, e.g. 83)
-- "qty_unit": the unit shown (e.g. "Case", "Bottle", "EA", "Case of 06")
-- "unit_price": the unit price number
-- "line_total": the line amount/total number
+For EACH row in the table, tell me exactly:
+- "no": item number column (e.g. "FG-1516")
+- "desc": full description text (copy it exactly, include the flavor/product name)
+- "qty": the quantity NUMBER (just the digits, e.g. 83)
+- "unit": what unit (e.g. "Case of 06", "Case", "Bottle")
+- "price": unit price number
+- "total": line amount number
 
-Also extract from the header:
-- "invoice_no": order/invoice number
-- "supplier": supplier/company name
+Also read the invoice header:
+- "inv": invoice/order number
+- "to": who is it addressed to / customer
+- "from": supplier company
 - "date": the date
 
-CRITICAL: Read each row's quantity INDEPENDENTLY. The quantity number belongs to the row it appears in.
-Go row by row, top to bottom.
+IMPORTANT:
+- Each row is a SEPARATE product. Read the flavor name for each (Lime, Lemon, Orange, Grapefruit, etc.)
+- Do NOT combine or merge rows
+- The quantity on each row belongs ONLY to that row's product
 
-Return ONLY this JSON (no markdown, no explanation):
-{
-  "header": {"invoice_no": "...", "supplier": "...", "date": "..."},
-  "rows": [
-    {"no": "...", "desc": "...", "qty_num": 83, "qty_unit": "Case", "unit_price": 36.56, "line_total": 3034.48},
-    ...
-  ]
-}"""
+Return ONLY valid JSON:
+{"header": {"inv": "", "to": "", "from": "", "date": ""}, "rows": [{"no": "", "desc": "", "qty": 0, "unit": "", "price": 0, "total": 0}]}"""
 
 
-# ── Step 2: Python matching — deterministic, zero mistakes ──
+# ── Step 2: Deterministic Python matching ──
 
-# Keyword → item_code mapping
 PRODUCT_KEYWORDS = {
     ("arte", "orange"): "ARTE-ORG-1L-BTL",
     ("arte", "lime"): "ARTE-LME-1L-BTL",
@@ -59,12 +54,25 @@ PRODUCT_KEYWORDS = {
     ("joosy", "apple", "300"): "JOOS-APL-300-BTL",
 }
 
+# FG code → item_code (from your invoices)
+FG_CODES = {
+    "fg-1516": "ARTE-LME-1L-BTL",   # Lime
+    "fg-1515": "ARTE-LMN-1L-BTL",   # Lemon
+    "fg-1514": "ARTE-GRF-1L-BTL",   # Grapefruit
+    "fg-1513": "ARTE-ORG-1L-BTL",   # Orange
+}
 
-def match_product(desc: str, labels: list[dict]) -> str | None:
-    """Match a description to an item_code using keywords."""
+
+def match_product(desc: str, item_no: str, labels: list[dict]) -> str | None:
+    """Match using multiple strategies — most reliable first."""
     desc_lower = desc.lower()
+    item_no_lower = (item_no or "").lower().strip()
 
-    # Try keyword matching first (most reliable)
+    # Strategy 1: FG code mapping (most reliable — unique per product)
+    if item_no_lower in FG_CODES:
+        return FG_CODES[item_no_lower]
+
+    # Strategy 2: Keyword matching on description
     best_match = None
     best_score = 0
     for keywords, code in PRODUCT_KEYWORDS.items():
@@ -72,31 +80,45 @@ def match_product(desc: str, labels: list[dict]) -> str | None:
         if score == len(keywords) and score > best_score:
             best_match = code
             best_score = score
-        elif score > 0 and score == len(keywords):
-            best_match = code
 
     if best_match:
         return best_match
 
-    # Fallback: fuzzy match against label names
+    # Strategy 3: Single flavor keyword (if brand is in desc)
+    flavors = {
+        "lime": "ARTE-LME-1L-BTL",
+        "lemon": "ARTE-LMN-1L-BTL",
+        "grapefruit": "ARTE-GRF-1L-BTL",
+        "orange": "ARTE-ORG-1L-BTL",
+        "blueberry": None,
+        "sunshine": None,
+        "tropical": None,
+        "mandarin": None,
+        "apple": None,
+    }
+    if "arte" in desc_lower or "drink arte" in desc_lower:
+        for flavor, code in flavors.items():
+            if code and flavor in desc_lower:
+                return code
+
+    # Strategy 4: Fuzzy match against DB labels
     for label in labels:
-        name_lower = label["label_name"].lower()
+        if label["category"] != "juice":
+            continue
         flavor_lower = label["flavor"].lower()
-        if flavor_lower in desc_lower and label["category"] == "juice":
-            # Check brand
-            brand_lower = label["brand"].lower()
-            if brand_lower in desc_lower or brand_lower[:4] in desc_lower:
-                return label["item_code"]
+        brand_lower = label["brand"].lower()
+        if flavor_lower in desc_lower and (brand_lower in desc_lower or brand_lower[:4] in desc_lower):
+            return label["item_code"]
 
     return None
 
 
-def calc_bottles(qty_num: int, qty_unit: str, case_size: int = 6) -> int:
-    """Convert quantity to bottles. Cases get multiplied, bottles stay as-is."""
-    unit = qty_unit.lower().strip()
-    if "case" in unit or "cs" in unit or "crate" in unit:
-        return qty_num * case_size
-    return qty_num
+def calc_bottles(qty: int, unit: str, case_size: int = 6) -> int:
+    """Convert to bottles."""
+    unit_lower = unit.lower()
+    if "case" in unit_lower or "cs" in unit_lower or "crate" in unit_lower:
+        return qty * case_size
+    return qty
 
 
 def get_case_size(item_code: str, labels: list[dict]) -> int:
@@ -107,62 +129,60 @@ def get_case_size(item_code: str, labels: list[dict]) -> int:
     return 6
 
 
-def validate_with_line_total(qty_num: int, unit_price: float, line_total: float) -> int | None:
-    """Cross-check quantity using line_total / unit_price."""
-    if not unit_price or unit_price <= 0 or not line_total or line_total <= 0:
-        return None
-    calculated = round(line_total / unit_price)
-    # If the calculated qty is close to qty_num, trust it
-    if abs(calculated - qty_num) <= 1:
-        return qty_num
-    # If they disagree, trust the math (line_total / unit_price)
+def validate_qty(qty: int, price: float, total: float) -> int:
+    """Cross-check quantity using total / price."""
+    if not price or price <= 0 or not total or total <= 0:
+        return qty
+    calculated = round(total / price)
+    if abs(calculated - qty) <= 1:
+        return qty
+    # Math disagrees — trust math
     return calculated
 
 
 def process_ocr_result(raw: dict, labels: list[dict]) -> dict:
-    """Step 2: Take raw OCR data and apply deterministic matching + math."""
+    """Deterministic processing — no AI, pure code."""
     header = raw.get("header", {})
     rows = raw.get("rows", [])
     items = []
 
     for row in rows:
-        desc = row.get("desc", "")
-        qty_num = int(row.get("qty_num", 0) or 0)
-        qty_unit = row.get("qty_unit", "")
-        unit_price = float(row.get("unit_price", 0) or 0)
-        line_total = float(row.get("line_total", 0) or 0)
+        desc = str(row.get("desc", ""))
+        item_no = str(row.get("no", ""))
+        qty = int(row.get("qty", 0) or 0)
+        unit = str(row.get("unit", ""))
+        price = float(row.get("price", 0) or 0)
+        total = float(row.get("total", 0) or 0)
 
-        # Cross-validate quantity with line math
-        validated_qty = validate_with_line_total(qty_num, unit_price, line_total)
-        if validated_qty is not None:
-            qty_num = validated_qty
+        # Validate quantity with math
+        qty = validate_qty(qty, price, total)
 
-        # Match to product
-        matched_code = match_product(desc, labels)
+        # Match product
+        matched_code = match_product(desc, item_no, labels)
 
-        # Get case size for this product
+        # Get case size
         case_size = get_case_size(matched_code, labels) if matched_code else 6
 
         # Convert to bottles
-        bottles = calc_bottles(qty_num, qty_unit, case_size)
+        bottles = calc_bottles(qty, unit, case_size)
 
         items.append({
-            "description": desc,
+            "description": f"{desc} [{item_no}]" if item_no else desc,
             "quantity_bottles": bottles,
-            "quantity_cases": qty_num if "case" in qty_unit.lower() else None,
-            "unit_price": unit_price if unit_price > 0 else None,
+            "quantity_cases": qty if "case" in unit.lower() else None,
+            "unit_price": price if price > 0 else None,
             "matched_item_code": matched_code,
         })
 
     return {
         "items": items,
-        "invoice_number": header.get("invoice_no"),
-        "supplier": header.get("supplier"),
-        "invoice_date": header.get("date"),
+        "invoice_number": header.get("inv") or "",
+        "supplier": header.get("from") or header.get("to") or "",
+        "invoice_date": header.get("date") or "",
     }
 
 
-# ── Main extraction function ──
+# ── Main ──
 
 async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> dict:
     groq_key = os.getenv("GROQ_API_KEY")
@@ -170,13 +190,11 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
         raise ValueError("GROQ_API_KEY not set — add it to your .env file")
 
     labels = [l.to_dict() for l in db.query(Label).all()]
-
     b64 = base64.standard_b64encode(file_bytes).decode("utf-8")
 
     supported_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     media_type = content_type if content_type in supported_types else "image/jpeg"
 
-    # Step 1: LLM does OCR only — reads raw text from each row
     async with httpx.AsyncClient(timeout=90.0) as client:
         resp = await client.post(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -189,7 +207,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a precise OCR reader. Read invoice images and extract raw text data into JSON. Do NOT do any math or calculations. Just read what is written.",
+                        "content": "You are an OCR reader. Read text from invoice images exactly as written. Each table row is a separate product — never combine rows. Output only JSON.",
                     },
                     {
                         "role": "user",
@@ -216,7 +234,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     data = resp.json()
     response_text = data["choices"][0]["message"]["content"].strip()
 
-    # Strip markdown fences if present
+    # Strip markdown fences
     if response_text.startswith("```"):
         lines = response_text.split("\n")
         response_text = "\n".join(
@@ -226,7 +244,6 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     try:
         raw_ocr = json.loads(response_text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse OCR response as JSON: {e}\nRaw: {response_text[:500]}")
+        raise ValueError(f"Failed to parse response: {e}\nRaw: {response_text[:500]}")
 
-    # Step 2: Python does all math + matching (deterministic, no mistakes)
     return process_ocr_result(raw_ocr, labels)
