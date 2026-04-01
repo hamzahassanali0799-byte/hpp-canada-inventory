@@ -1,7 +1,10 @@
 const API_KEY = 'changeme'
+// When deployed separately (e.g., frontend on Vercel, backend on Render),
+// set VITE_API_URL to the backend URL. Otherwise defaults to same-origin.
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 async function request(path, options = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       'X-API-Key': API_KEY,

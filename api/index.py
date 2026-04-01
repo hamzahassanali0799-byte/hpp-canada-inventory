@@ -1,12 +1,15 @@
+"""Vercel serverless entry point for FastAPI backend."""
 import os
-import asyncio
-from dotenv import load_dotenv
+import sys
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from backend.db.database import engine, SessionLocal, Base
 from backend.models.label import Label  # noqa: F401
 from backend.models.journal_entry import JournalEntry  # noqa: F401
@@ -35,9 +38,6 @@ API_KEY = os.getenv("API_KEY", "changeme")
 
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
-    # Skip auth for health endpoint (keep-alive pings)
-    if request.url.path == "/api/health":
-        return await call_next(request)
     if request.url.path.startswith("/api/"):
         key = request.headers.get("X-API-Key", "")
         if key != API_KEY:
@@ -53,29 +53,3 @@ app.include_router(journal.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
-
-
-# Keep-alive: self-ping every 10 minutes to prevent Render free tier cold starts
-async def keep_alive():
-    import httpx
-    render_url = os.getenv("RENDER_EXTERNAL_URL")
-    if not render_url:
-        return
-    while True:
-        await asyncio.sleep(600)  # 10 minutes
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.get(f"{render_url}/api/health", timeout=10)
-        except Exception:
-            pass
-
-
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(keep_alive())
-
-
-# Serve frontend static files if built
-frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-if os.path.isdir(frontend_dist):
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")

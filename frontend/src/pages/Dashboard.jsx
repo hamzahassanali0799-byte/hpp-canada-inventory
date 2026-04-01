@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Plus, RefreshCw, Droplets, Tag, Box, Package, Wine } from 'lucide-react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { Search, Plus, RefreshCw, Droplets, Tag, Box, Package, Wine, ArrowLeft } from 'lucide-react'
 import { fetchLabels } from '../api'
 import LabelCard from '../components/LabelCard'
 import AddLabelModal from '../components/AddLabelModal'
@@ -13,6 +14,10 @@ const MAIN_TABS = [
 ]
 
 export default function Dashboard() {
+  const { brand: urlBrand } = useParams()
+  const navigate = useNavigate()
+  const activeBrand = urlBrand === 'all' ? '' : (urlBrand || '')
+
   const [allItems, setAllItems] = useState([])
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('juice')
@@ -21,6 +26,8 @@ export default function Dashboard() {
   const [showAdd, setShowAdd] = useState(false)
   const [editLabel, setEditLabel] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const brandColor = activeBrand ? getBrandColor(activeBrand) : ARTE_NAVY
 
   const load = async () => {
     setLoading(true)
@@ -35,8 +42,13 @@ export default function Dashboard() {
 
   useEffect(() => { load() }, [search])
 
-  // Filter items by category
-  const catItems = useMemo(() => allItems.filter((i) => i.category === category), [allItems, category])
+  // Filter items by brand from URL, then by category
+  const brandItems = useMemo(() => {
+    if (!activeBrand) return allItems
+    return allItems.filter((i) => i.brand === activeBrand)
+  }, [allItems, activeBrand])
+
+  const catItems = useMemo(() => brandItems.filter((i) => i.category === category), [brandItems, category])
 
   // Available sizes for current category
   const sizes = useMemo(() => {
@@ -44,7 +56,7 @@ export default function Dashboard() {
     return s.sort()
   }, [catItems])
 
-  // Available brands for current category
+  // Available brands for current category (only when viewing all)
   const brands = useMemo(() => {
     const b = [...new Set(catItems.map((i) => i.brand))]
     return b.sort()
@@ -77,8 +89,26 @@ export default function Dashboard() {
     setBrandFilter('')
   }
 
+  const brandTitle = activeBrand === 'Quirkies' ? 'Quirkies' : activeBrand === 'Joosy' ? 'Joosy' : activeBrand === 'Arte' ? 'Drink Arte' : 'All Inventory'
+
   return (
     <div className="space-y-4">
+      {/* Brand header with back button */}
+      <div className="flex items-center gap-3 mb-2">
+        <button
+          onClick={() => navigate('/')}
+          className="p-2 rounded-xl bg-white border border-stone-200 hover:bg-stone-50 transition shadow-sm"
+        >
+          <ArrowLeft size={18} className="text-stone-500" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: brandColor }}>
+            {brandTitle}
+          </h1>
+          <p className="text-[10px] text-stone-400 uppercase tracking-[0.15em] font-semibold">Inventory</p>
+        </div>
+      </div>
+
       {/* Main category tabs + total */}
       <div className="flex items-center gap-1.5">
         <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white shadow-sm flex-1">
@@ -89,7 +119,7 @@ export default function Dashboard() {
               className={`flex-1 py-2 text-[9px] font-bold uppercase tracking-wide transition whitespace-nowrap ${
                 category === key ? 'text-white' : 'text-stone-400'
               }`}
-              style={category === key ? { backgroundColor: ARTE_NAVY } : {}}
+              style={category === key ? { backgroundColor: brandColor } : {}}
             >
               {label}
             </button>
@@ -97,7 +127,7 @@ export default function Dashboard() {
         </div>
         <div className="bg-white rounded-lg border border-stone-200 px-2 py-1.5 shadow-sm flex-shrink-0 text-center">
           <span className="text-[7px] text-stone-400 uppercase tracking-wider font-bold block leading-none">Total</span>
-          <span className="text-sm font-bold" style={{ color: ARTE_NAVY }}>{totalUnits}</span>
+          <span className="text-sm font-bold" style={{ color: brandColor }}>{totalUnits}</span>
         </div>
       </div>
 
@@ -125,8 +155,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Brand filter */}
-          {brands.length > 1 && (
+          {/* Brand filter - only show when viewing all brands */}
+          {!activeBrand && brands.length > 1 && (
             <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white">
               <button
                 onClick={() => setBrandFilter('')}
@@ -168,7 +198,7 @@ export default function Dashboard() {
         <button
           onClick={() => { setEditLabel(null); setShowAdd(true) }}
           className="px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-sm text-white whitespace-nowrap"
-          style={{ backgroundColor: ARTE_NAVY }}
+          style={{ backgroundColor: brandColor }}
         >
           <Plus size={12} /> Add
         </button>

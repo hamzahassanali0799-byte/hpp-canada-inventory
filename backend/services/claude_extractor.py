@@ -41,20 +41,19 @@ If you can't determine a field, use null."""
 async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> dict:
     groq_key = os.getenv("GROQ_API_KEY")
     if not groq_key:
-        raise ValueError("GROQ_API_KEY not set")
+        raise ValueError("GROQ_API_KEY not set — add it to your .env file")
 
     labels = [l.to_dict() for l in db.query(Label).all()]
     prompt = get_extraction_prompt(labels)
 
     b64 = base64.standard_b64encode(file_bytes).decode("utf-8")
 
-    # Map content type for Groq vision
-    media_type = content_type
-    if media_type not in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
-        media_type = "image/jpeg"
+    # Map content type for Groq vision — only these are supported
+    supported_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    media_type = content_type if content_type in supported_types else "image/jpeg"
 
-    # Use Groq API with Llama 3.2 90B Vision (free)
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    # Use Groq API with Llama 3.2 Vision
+    async with httpx.AsyncClient(timeout=90.0) as client:
         resp = await client.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -86,7 +85,13 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
         )
 
     if resp.status_code != 200:
-        raise ValueError(f"Groq API error ({resp.status_code}): {resp.text}")
+        error_detail = resp.text
+        try:
+            err_json = resp.json()
+            error_detail = err_json.get("error", {}).get("message", error_detail)
+        except Exception:
+            pass
+        raise ValueError(f"Vision API error ({resp.status_code}): {error_detail}")
 
     data = resp.json()
     response_text = data["choices"][0]["message"]["content"].strip()
@@ -98,4 +103,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
             lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
         )
 
-    return json.loads(response_text)
+    try:
+        return json.loads(response_text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse AI response as JSON: {e}\nRaw: {response_text[:500]}")

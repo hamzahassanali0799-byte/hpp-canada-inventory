@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Routes, Route, NavLink } from 'react-router-dom'
-import { LayoutGrid, ScanLine, FileSpreadsheet, Menu, X } from 'lucide-react'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { LayoutGrid, ScanLine, FileSpreadsheet, Menu, X, Home as HomeIcon } from 'lucide-react'
+import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import ScanPage from './pages/ScanPage'
 import JournalPanel from './components/JournalPanel'
 import { ARTE_NAVY } from './components/CitrusIcon'
 
 const NAV = [
-  { to: '/', icon: LayoutGrid, label: 'Dashboard' },
+  { to: '/', icon: HomeIcon, label: 'Home' },
   { to: '/scan', icon: ScanLine, label: 'Invoice Scan' },
 ]
 
@@ -15,6 +16,19 @@ export default function App() {
   const [journalOpen, setJournalOpen] = useState(false)
   const [journalKey, setJournalKey] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const location = useLocation()
+  const isHome = location.pathname === '/'
+
+  // On the home page, show a minimal layout (no sidebar)
+  if (isHome) {
+    return (
+      <div className="min-h-screen bg-stone-50 text-stone-900">
+        <Routes>
+          <Route path="/" element={<Home />} />
+        </Routes>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex bg-stone-50 text-stone-900">
@@ -86,7 +100,7 @@ export default function App() {
       {/* Main */}
       <main className="flex-1 p-3 pt-14 md:pt-8 md:p-8 overflow-auto">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/brand/:brand" element={<Dashboard />} />
           <Route path="/scan" element={<ScanPage />} />
         </Routes>
       </main>
