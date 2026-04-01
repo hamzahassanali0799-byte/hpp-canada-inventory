@@ -34,7 +34,10 @@ API_KEY = os.getenv("API_KEY", "changeme")
 
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
-    # Skip auth for health endpoint (keep-alive pings)
+    # Skip CORS preflight requests (OPTIONS)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    # Skip auth for health endpoint
     if request.url.path == "/api/health":
         return await call_next(request)
     if request.url.path.startswith("/api/"):
