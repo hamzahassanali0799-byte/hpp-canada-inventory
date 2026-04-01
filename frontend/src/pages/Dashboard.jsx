@@ -110,14 +110,14 @@ export default function Dashboard() {
       </div>
 
       {/* Main category tabs + total */}
-      <div className="flex items-center gap-1.5">
-        <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white shadow-sm flex-1">
+      <div className="flex items-center gap-2">
+        <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm flex-1">
           {MAIN_TABS.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => switchTab(key)}
-              className={`flex-1 py-2 text-[9px] font-bold uppercase tracking-wide transition whitespace-nowrap ${
-                category === key ? 'text-white' : 'text-stone-400'
+              className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide transition whitespace-nowrap ${
+                category === key ? 'text-white' : 'text-stone-400 hover:text-stone-600'
               }`}
               style={category === key ? { backgroundColor: brandColor } : {}}
             >
@@ -125,9 +125,9 @@ export default function Dashboard() {
             </button>
           ))}
         </div>
-        <div className="bg-white rounded-lg border border-stone-200 px-2 py-1.5 shadow-sm flex-shrink-0 text-center">
-          <span className="text-[7px] text-stone-400 uppercase tracking-wider font-bold block leading-none">Total</span>
-          <span className="text-sm font-bold" style={{ color: brandColor }}>{totalUnits}</span>
+        <div className="bg-white rounded-xl border border-stone-200 px-3 py-2 shadow-sm flex-shrink-0 text-center">
+          <span className="text-[9px] text-stone-400 uppercase tracking-wider font-bold block leading-none">Total</span>
+          <span className="text-lg font-extrabold" style={{ color: brandColor }}>{totalUnits}</span>
         </div>
       </div>
 
@@ -139,7 +139,7 @@ export default function Dashboard() {
             <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white">
               <button
                 onClick={() => setSizeFilter('')}
-                className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap ${
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase tracking-wide transition whitespace-nowrap ${
                   !sizeFilter ? 'bg-stone-800 text-white' : 'text-stone-400'
                 }`}
               >All Sizes</button>
@@ -147,7 +147,7 @@ export default function Dashboard() {
                 <button
                   key={s}
                   onClick={() => setSizeFilter(s)}
-                  className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap ${
+                  className={`px-2.5 py-1.5 text-xs font-bold uppercase tracking-wide transition whitespace-nowrap ${
                     sizeFilter === s ? 'bg-stone-800 text-white' : 'text-stone-400'
                   }`}
                 >{s}</button>
@@ -160,7 +160,7 @@ export default function Dashboard() {
             <div className="flex rounded-lg overflow-hidden border border-stone-200 bg-white">
               <button
                 onClick={() => setBrandFilter('')}
-                className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap ${
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase tracking-wide transition whitespace-nowrap ${
                   !brandFilter ? 'bg-stone-800 text-white' : 'text-stone-400'
                 }`}
               >All Brands</button>
@@ -168,7 +168,7 @@ export default function Dashboard() {
                 <button
                   key={b}
                   onClick={() => setBrandFilter(b)}
-                  className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap"
+                  className="px-2.5 py-1.5 text-xs font-bold uppercase tracking-wide transition whitespace-nowrap"
                   style={brandFilter === b
                     ? { backgroundColor: getBrandColor(b), color: 'white' }
                     : { color: '#a8a29e' }
@@ -209,10 +209,10 @@ export default function Dashboard() {
         <div key={brand}>
           <div className="flex items-center gap-2 mb-3">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getBrandColor(brand) }} />
-            <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: getBrandColor(brand) }}>
+            <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: getBrandColor(brand) }}>
               {brand}
             </h2>
-            <span className="text-[10px] text-stone-400 font-medium">({items.length})</span>
+            <span className="text-xs text-stone-400 font-medium">({items.length})</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-6">
             {items.map((l) => (

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Minus, Plus, Edit3, Tag, Box, Wine, Trash2 } from 'lucide-react'
+import { Minus, Plus, Edit3, Trash2 } from 'lucide-react'
 import { adjustStock, deleteLabel } from '../api'
 import BottleImage, { getCitrus, getBrandColor } from './CitrusIcon'
 
@@ -10,19 +10,26 @@ function getShelfBadge(days) {
   return { bg: '#fef2f2', color: '#b91c1c', label: `${days}d` }
 }
 
+function getCategoryIcon(category) {
+  if (category === 'label') return '🏷️'
+  if (category === 'box') return '📦'
+  if (category === 'bottle') return '🫙'
+  return null
+}
+
 export default function LabelCard({ label, onUpdate, onEdit }) {
   const [manualQty, setManualQty] = useState('')
   const [loading, setLoading] = useState(false)
   const c = getCitrus(label.color_identifier)
   const shelf = getShelfBadge(label.shelf_life_days)
   const brandColor = getBrandColor(label.brand)
+  const isJuice = label.category === 'juice'
   const isLabel = label.category === 'label'
   const isBox = label.category === 'box'
-  const isJuice = label.category === 'juice'
-  const isBottle = label.category === 'bottle'
 
-  const unitName = isBox ? 'units' : isLabel ? 'units' : 'bottles'
-  const caseName = isBox ? 'n/a' : isLabel ? 'rolls' : 'cases'
+  // Clear unit names based on category
+  const unitName = isBox ? 'units' : isLabel ? 'rolls' : 'bottles'
+  const caseName = isBox ? 'packs' : isLabel ? 'boxes' : 'cases'
 
   const handleAdjust = async (qty, mode = 'bottle') => {
     if (qty === 0) return
@@ -61,67 +68,62 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
     setLoading(false)
   }
 
-  const icon = isBox ? <Box size={20} style={{ color: c.labelColor }} />
-    : isLabel ? <Tag size={20} style={{ color: c.labelColor }} />
-    : isBottle ? <Wine size={20} style={{ color: c.labelColor }} />
-    : null
-
   return (
-    <div className="rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 bg-white border border-stone-100">
-      <div className="h-1" style={{ backgroundColor: c.labelColor }} />
+    <div className="rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 bg-white border border-stone-200">
+      {/* Top color bar */}
+      <div className="h-1.5" style={{ backgroundColor: c.labelColor }} />
 
-      <div className="relative" style={{ backgroundColor: c.cardBg }}>
-        <div className="px-4 pt-3 pb-3 flex items-center gap-3">
-          <div className="flex-shrink-0">
-            {(isLabel || isBox || isBottle) ? (
-              <div className="w-10 h-12 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: c.labelColor + '18', border: `1.5px dashed ${c.labelColor}` }}>
-                {icon}
-              </div>
-            ) : (
-              <BottleImage colorId={label.color_identifier} size="sm" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-white"
-                style={{ backgroundColor: brandColor }}>{label.brand}</span>
-              <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-stone-200 text-stone-500">
-                {label.size}
-              </span>
+      {/* Header: image + name */}
+      <div className="px-4 pt-3 pb-3 flex items-center gap-3" style={{ backgroundColor: c.cardBg }}>
+        <div className="flex-shrink-0">
+          {isJuice ? (
+            <BottleImage colorId={label.color_identifier} size="sm" />
+          ) : (
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+              style={{ backgroundColor: `${c.labelColor}15`, border: `1.5px solid ${c.labelColor}30` }}>
+              {getCategoryIcon(label.category)}
             </div>
-            <h3 className="text-sm font-bold truncate" style={{ color: brandColor }}>{label.flavor}</h3>
-          </div>
-          <button onClick={() => onEdit(label)}
-            className="p-1.5 rounded-lg hover:bg-white/60 transition" style={{ color: brandColor }}>
-            <Edit3 size={12} />
-          </button>
-        </div>
-      </div>
-
-      <div className="px-4 pb-4 pt-2">
-        {/* Badges */}
-        <div className="flex flex-wrap gap-1 mb-2.5">
-          {shelf && (
-            <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: shelf.bg, color: shelf.color }}>
-              {shelf.label}
-            </span>
           )}
         </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-white"
+              style={{ backgroundColor: brandColor }}>{label.brand}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-stone-200 text-stone-600">
+              {label.size}
+            </span>
+            {shelf && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: shelf.bg, color: shelf.color }}>
+                {shelf.label}
+              </span>
+            )}
+          </div>
+          <h3 className="text-sm font-bold truncate" style={{ color: brandColor }}>{label.flavor}</h3>
+        </div>
+        <button onClick={() => onEdit(label)}
+          className="p-1.5 rounded-lg hover:bg-white/60 transition" style={{ color: brandColor }}>
+          <Edit3 size={14} />
+        </button>
+      </div>
 
+      <div className="px-4 pb-4 pt-3">
         {/* Stock display */}
-        <div className="rounded-lg p-3 mb-2.5 bg-stone-50 border border-stone-100">
+        <div className="rounded-xl p-3 mb-3 bg-stone-50 border border-stone-200">
           <div className="flex items-center">
             <div className="flex-1 text-center">
-              <span className="text-2xl font-bold" style={{ color: brandColor }}>{label.current_stock_bottles}</span>
-              <p className="text-[8px] text-stone-400 mt-0.5 uppercase tracking-widest font-bold">{unitName}</p>
+              <span className="text-3xl font-extrabold" style={{ color: brandColor }}>
+                {label.current_stock_bottles}
+              </span>
+              <p className="text-[9px] text-stone-500 mt-0.5 uppercase tracking-widest font-bold">{unitName}</p>
             </div>
             {!isBox && label.case_quantity > 1 && (
               <>
-                <div className="w-px h-8 bg-stone-200" />
+                <div className="w-px h-10 bg-stone-200" />
                 <div className="flex-1 text-center">
-                  <span className="text-2xl font-bold" style={{ color: brandColor }}>{label.current_stock_cases}</span>
-                  <p className="text-[8px] text-stone-400 mt-0.5 uppercase tracking-widest font-bold">{caseName}</p>
+                  <span className="text-3xl font-extrabold" style={{ color: brandColor }}>
+                    {label.current_stock_cases}
+                  </span>
+                  <p className="text-[9px] text-stone-500 mt-0.5 uppercase tracking-widest font-bold">{caseName}</p>
                 </div>
               </>
             )}
@@ -129,7 +131,7 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
         </div>
 
         {/* Manual qty input */}
-        <div className="flex items-center gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 mb-2.5">
           <input
             type="number"
             min="0"
@@ -137,13 +139,13 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
             onChange={(e) => setManualQty(e.target.value)}
             onKeyDown={handleManualKeyDown}
             placeholder="Set qty"
-            className="flex-1 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-orange-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="flex-1 bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm text-center font-medium focus:outline-none focus:ring-2 focus:ring-stone-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <button
             onClick={handleManualSet}
             disabled={loading || manualQty === ''}
-            className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase text-white transition disabled:opacity-40"
-            style={{ backgroundColor: c.labelColor }}
+            className="px-3 py-2 rounded-lg text-xs font-bold uppercase text-white transition disabled:opacity-40 shadow-sm"
+            style={{ backgroundColor: brandColor }}
           >
             Set
           </button>
@@ -152,31 +154,31 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
         {/* +/- quick adjust */}
         <div className="flex items-center gap-1.5">
           <button onClick={() => handleAdjust(-1)} disabled={loading}
-            className="p-1.5 rounded-lg border border-stone-200 hover:bg-red-50 text-stone-400 hover:text-red-500 transition disabled:opacity-40">
-            <Minus size={12} />
+            className="p-2 rounded-lg border border-stone-200 hover:bg-red-50 text-stone-500 hover:text-red-500 transition disabled:opacity-40">
+            <Minus size={14} />
           </button>
           <button onClick={() => handleAdjust(-label.case_quantity)} disabled={loading}
-            className="flex-1 py-1.5 rounded-lg border border-stone-200 text-[9px] font-bold uppercase text-stone-400 hover:bg-red-50 hover:text-red-500 transition disabled:opacity-40">
+            className="flex-1 py-2 rounded-lg border border-stone-200 text-xs font-bold text-stone-500 hover:bg-red-50 hover:text-red-500 transition disabled:opacity-40">
             -{label.case_quantity}
           </button>
           <button onClick={() => handleAdjust(label.case_quantity)} disabled={loading}
-            className="flex-1 py-1.5 rounded-lg border border-stone-200 text-[9px] font-bold uppercase text-stone-400 hover:bg-emerald-50 hover:text-emerald-500 transition disabled:opacity-40">
+            className="flex-1 py-2 rounded-lg border border-stone-200 text-xs font-bold text-stone-500 hover:bg-emerald-50 hover:text-emerald-600 transition disabled:opacity-40">
             +{label.case_quantity}
           </button>
           <button onClick={() => handleAdjust(1)} disabled={loading}
-            className="p-1.5 rounded-lg border border-stone-200 hover:bg-emerald-50 text-stone-400 hover:text-emerald-500 transition disabled:opacity-40">
-            <Plus size={12} />
+            className="p-2 rounded-lg border border-stone-200 hover:bg-emerald-50 text-stone-500 hover:text-emerald-600 transition disabled:opacity-40">
+            <Plus size={14} />
           </button>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-stone-100">
-          <span className="text-[9px] font-mono text-stone-400">{label.item_code}</span>
+        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-stone-100">
+          <span className="text-[10px] font-mono text-stone-500 font-medium">{label.item_code}</span>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-stone-400">{label.location_code}</span>
+            <span className="text-[10px] text-stone-400 font-medium">{label.location_code}</span>
             <button onClick={handleDelete} disabled={loading}
               className="p-1 rounded hover:bg-red-50 text-stone-300 hover:text-red-500 transition">
-              <Trash2 size={10} />
+              <Trash2 size={11} />
             </button>
           </div>
         </div>
