@@ -52,7 +52,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     supported_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     media_type = content_type if content_type in supported_types else "image/jpeg"
 
-    # Use Groq API with Llama 3.2 Vision
+    # Use Groq API with Llama 4 Scout vision
     async with httpx.AsyncClient(timeout=90.0) as client:
         resp = await client.post(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -67,14 +67,14 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                         "role": "user",
                         "content": [
                             {
+                                "type": "text",
+                                "text": prompt,
+                            },
+                            {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:{media_type};base64,{b64}",
                                 },
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt,
                             },
                         ],
                     }
