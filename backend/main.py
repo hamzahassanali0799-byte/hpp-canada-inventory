@@ -1,5 +1,4 @@
 import os
-import asyncio
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -53,26 +52,6 @@ app.include_router(journal.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
-
-
-# Keep-alive: self-ping every 10 minutes to prevent Render free tier cold starts
-async def keep_alive():
-    import httpx
-    render_url = os.getenv("RENDER_EXTERNAL_URL")
-    if not render_url:
-        return
-    while True:
-        await asyncio.sleep(600)  # 10 minutes
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.get(f"{render_url}/api/health", timeout=10)
-        except Exception:
-            pass
-
-
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(keep_alive())
 
 
 # Serve frontend static files if built
