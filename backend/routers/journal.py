@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from backend.db.database import get_db
 from backend.models.journal_entry import JournalEntry
-from backend.services.bc_client import export_csv, post_to_bc
+from backend.services.bc_client import export_csv, post_to_bc, test_bc_connection, is_bc_configured
 import io
 
 router = APIRouter(prefix="/api/journal", tags=["journal"])
@@ -31,6 +31,14 @@ def export_to_csv(db: Session = Depends(get_db)):
 @router.post("/export/bc")
 async def export_to_bc(db: Session = Depends(get_db)):
     result = await post_to_bc(db)
+    return result
+
+
+@router.get("/bc/status")
+async def bc_status():
+    if not is_bc_configured():
+        return {"configured": False, "message": "Set BC_BASE_URL, BC_COMPANY_ID, BC_USERNAME, BC_PASSWORD in .env"}
+    result = await test_bc_connection()
     return result
 
 

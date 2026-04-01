@@ -2,7 +2,19 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  ],
+  "experimentalServices": {
+    "frontend": {
+      "entrypoint": "frontend",
+      "routePrefix": "/",
+      "framework": "vite"
+    },
+    "backend": {
+      "entrypoint": "backend",
+      "routePrefix": "/api"
+    }
+  }
 }
