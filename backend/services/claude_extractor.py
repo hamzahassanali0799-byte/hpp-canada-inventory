@@ -8,34 +8,46 @@ from backend.models.label import Label
 
 def get_extraction_prompt(labels: list[dict]) -> str:
     label_list = "\n".join(
-        f"- {l['item_code']}: {l['label_name']} ({l['flavor']}, {l['size']})"
+        f"- {l['item_code']}: {l['label_name']} ({l['flavor']}, {l['size']}, case qty {l.get('case_quantity', 6)})"
         for l in labels
     )
-    return f"""You are an invoice data extractor for an HPP juice company.
-Extract all line items from this delivery invoice image/document.
+    return f"""You are a precise invoice data extractor. Read the invoice image VERY carefully.
 
-Known product labels in inventory:
+CRITICAL RULES:
+1. Read EACH line item row separately — do NOT mix up quantities between rows
+2. For each row, read the description, then the quantity number right next to it
+3. If the quantity says "Cases" or "Case of 06", multiply the number by 6 to get bottles
+4. Double-check: the quantity you read belongs to THAT row's product, not another row
+5. Return ONLY valid JSON — no markdown, no explanation, no code fences
+
+Known products in our inventory:
 {label_list}
 
-Return ONLY valid JSON (no markdown, no code fences) with this structure:
+For EACH line item in the invoice, extract in order from top to bottom:
 {{
   "items": [
     {{
-      "description": "product description from invoice",
-      "quantity_bottles": <integer>,
-      "quantity_cases": <integer or null>,
-      "unit_price": <float or null>,
-      "matched_item_code": "<best matching item_code from the list above, or null if no match>"
+      "description": "exact text from the invoice line",
+      "quantity_bottles": <number of cases * 6 if cases, or raw number if bottles>,
+      "quantity_cases": <number of cases as shown on invoice, or null>,
+      "unit_price": <price per unit from invoice, or null>,
+      "matched_item_code": "<match to item_code from list above, or null>"
     }}
   ],
-  "invoice_number": "<string or null>",
-  "supplier": "<string or null>",
-  "invoice_date": "<string or null>"
+  "invoice_number": "<from invoice header>",
+  "supplier": "<from invoice header>",
+  "invoice_date": "<from invoice header>"
 }}
 
-Match products to known labels by fuzzy name matching (e.g. "Orange Juice 1L" → "ARTE-ORG-1L").
-If quantity is in cases, multiply by 6 for quantity_bottles.
-If you can't determine a field, use null."""
+MATCHING RULES:
+- "Drink Arte, Lime" or "Arte Lime" → ARTE-LME-1L-BTL
+- "Drink Arte, Lemon" or "Arte Lemon" → ARTE-LMN-1L-BTL
+- "Drink Arte, Orange" or "Arte Orange" → ARTE-ORG-1L-BTL
+- "Drink Arte, Grapefruit" or "Arte Grapefruit" → ARTE-GRF-1L-BTL
+- "Quirkies" products → QRKS-xxx codes
+- "Joosy" products → JOOS-xxx codes
+
+OUTPUT ONLY THE JSON. Nothing else."""
 
 
 async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> dict:
@@ -64,6 +76,10 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                 "model": "meta-llama/llama-4-scout-17b-16e-instruct",
                 "messages": [
                     {
+                        "role": "system",
+                        "content": "You are a precise OCR data extractor. Read invoice images carefully and return only valid JSON. Never mix up quantities between line items. Read each row independently.",
+                    },
+                    {
                         "role": "user",
                         "content": [
                             {
@@ -80,7 +96,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                     }
                 ],
                 "max_tokens": 2000,
-                "temperature": 0.1,
+                "temperature": 0.0,
             },
         )
 
