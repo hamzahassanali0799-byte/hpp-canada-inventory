@@ -120,19 +120,21 @@ export default function Dashboard() {
 
       {/* Main category tabs + total */}
       <div className="flex items-center gap-2">
-        <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm flex-1">
-          {MAIN_TABS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => switchTab(key)}
-              className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide transition whitespace-nowrap ${
-                category === key ? 'text-white' : 'text-stone-400 hover:text-stone-600'
-              }`}
-              style={category === key ? { backgroundColor: brandColor } : {}}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="overflow-x-auto scrollbar-hide flex-1">
+          <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm w-max min-w-full">
+            {MAIN_TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => switchTab(key)}
+                className={`px-3 py-2.5 text-xs font-bold uppercase tracking-wide transition whitespace-nowrap ${
+                  category === key ? 'text-white' : 'text-stone-400 hover:text-stone-600'
+                }`}
+                style={category === key ? { backgroundColor: brandColor } : {}}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="bg-white rounded-xl border border-stone-200 px-3 py-2 shadow-sm flex-shrink-0 text-center">
           <span className="text-[9px] text-stone-400 uppercase tracking-wider font-bold block leading-none">Total</span>
