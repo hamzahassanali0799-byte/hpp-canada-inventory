@@ -69,7 +69,7 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 bg-white border border-stone-200">
+    <div className="rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 bg-white border-2 border-stone-400">
       {/* Top color bar */}
       <div className="h-1.5" style={{ backgroundColor: c.labelColor }} />
 
