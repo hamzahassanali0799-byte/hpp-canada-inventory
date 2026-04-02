@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { Search, Plus, RefreshCw, Droplets, Tag, Box, Package, Wine, ArrowLeft } from 'lucide-react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { Search, Plus, RefreshCw, Droplets, Tag, Box, Package, Wine, ArrowLeft, Leaf } from 'lucide-react'
 import { fetchLabels } from '../api'
 import LabelCard from '../components/LabelCard'
 import AddLabelModal from '../components/AddLabelModal'
@@ -11,16 +11,25 @@ const MAIN_TABS = [
   { key: 'bottle', label: 'Bottles', icon: Wine },
   { key: 'label', label: 'Labels', icon: Tag },
   { key: 'box', label: 'Boxes', icon: Box },
+  { key: 'raw', label: 'Raw Ingredients', icon: Leaf },
+  { key: 'misc', label: 'Misc', icon: Package },
 ]
 
 export default function Dashboard() {
   const { brand: urlBrand } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const activeBrand = urlBrand === 'all' ? '' : (urlBrand || '')
 
   const [allItems, setAllItems] = useState([])
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('juice')
+  const [category, setCategory] = useState(() => searchParams.get('cat') || 'juice')
+
+  // Sync category when navigating between category cards on home
+  useEffect(() => {
+    const cat = searchParams.get('cat')
+    if (cat) setCategory(cat)
+  }, [searchParams])
   const [sizeFilter, setSizeFilter] = useState('')
   const [brandFilter, setBrandFilter] = useState('')
   const [showAdd, setShowAdd] = useState(false)
