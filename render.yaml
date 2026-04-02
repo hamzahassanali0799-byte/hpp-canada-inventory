@@ -6,7 +6,9 @@ services:
     envVars:
       - key: API_KEY
         value: changeme
-      - key: GROQ_API_KEY
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
         sync: false
       - key: RENDER_EXTERNAL_URL
         fromService:

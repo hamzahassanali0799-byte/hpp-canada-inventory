@@ -121,10 +121,9 @@ def process(raw: dict) -> dict:
 
 async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> dict:
     gemini_key = os.getenv("GEMINI_API_KEY")
-    groq_key = os.getenv("GROQ_API_KEY")
 
-    if not gemini_key and not groq_key:
-        raise ValueError("Set GEMINI_API_KEY or GROQ_API_KEY")
+    if not os.getenv("ANTHROPIC_API_KEY") and not gemini_key:
+        raise ValueError("Set ANTHROPIC_API_KEY or GEMINI_API_KEY")
 
     b64, mime = compress_image(file_bytes)
 
@@ -137,8 +136,38 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
 
     raw = None
 
-    # Try Gemini first
-    if gemini_key:
+    # Try Claude Haiku first (primary)
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": anthropic_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5-20251001",
+                        "max_tokens": 1024,
+                        "messages": [{"role": "user", "content": [
+                            {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
+                            {"type": "text", "text": prompt},
+                        ]}],
+                    },
+                )
+            if resp.status_code == 200:
+                text = resp.json()["content"][0]["text"].strip()
+                if text.startswith("```"):
+                    lines = text.split("\n")
+                    text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+                raw = json.loads(text)
+        except Exception:
+            pass
+
+    # Fallback to Gemini Flash
+    if not raw and gemini_key:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
@@ -150,31 +179,6 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                 )
             if resp.status_code == 200:
                 text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                if text.startswith("```"):
-                    lines = text.split("\n")
-                    text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-                raw = json.loads(text)
-        except Exception:
-            pass
-
-    # Fallback to Groq
-    if not raw and groq_key:
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {groq_key}"},
-                    json={
-                        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                        "messages": [{"role": "user", "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-                        ]}],
-                        "max_tokens": 1000, "temperature": 0.0,
-                    },
-                )
-            if resp.status_code == 200:
-                text = resp.json()["choices"][0]["message"]["content"].strip()
                 if text.startswith("```"):
                     lines = text.split("\n")
                     text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
