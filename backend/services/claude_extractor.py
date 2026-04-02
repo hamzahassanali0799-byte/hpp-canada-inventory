@@ -1,12 +1,15 @@
 import base64
 import json
 import io
+import logging
 import os
 import re
 import httpx
 from PIL import Image
 from sqlalchemy.orm import Session
 from backend.models.label import Label
+
+logger = logging.getLogger(__name__)
 
 
 def compress_image(file_bytes: bytes) -> tuple[str, str]:
@@ -135,10 +138,12 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     )
 
     raw = None
+    errors = []
 
     # Try Claude Haiku first (primary)
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
+        logger.info("Attempting extraction with Claude Haiku")
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
@@ -163,11 +168,21 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                     lines = text.split("\n")
                     text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
                 raw = json.loads(text)
-        except Exception:
-            pass
+                logger.info("Claude Haiku extraction succeeded")
+            else:
+                msg = f"Claude HTTP {resp.status_code}: {resp.text[:200]}"
+                logger.warning(msg)
+                errors.append(msg)
+        except Exception as e:
+            msg = f"Claude error: {e}"
+            logger.warning(msg)
+            errors.append(msg)
+    else:
+        logger.info("ANTHROPIC_API_KEY not set — skipping Claude, trying Gemini")
 
     # Fallback to Gemini Flash
     if not raw and gemini_key:
+        logger.info("Attempting extraction with Gemini Flash")
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
@@ -183,10 +198,21 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                     lines = text.split("\n")
                     text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
                 raw = json.loads(text)
-        except Exception:
-            pass
+                logger.info("Gemini Flash extraction succeeded")
+            else:
+                msg = f"Gemini HTTP {resp.status_code}: {resp.text[:200]}"
+                logger.warning(msg)
+                errors.append(msg)
+        except Exception as e:
+            msg = f"Gemini error: {e}"
+            logger.warning(msg)
+            errors.append(msg)
+    elif not raw and not gemini_key:
+        logger.warning("GEMINI_API_KEY not set — no fallback available")
 
     if not raw or not raw.get("rows"):
+        detail = "; ".join(errors) if errors else "no extractors succeeded"
+        logger.error("Invoice extraction failed: %s", detail)
         raise ValueError("Could not read invoice. Lay it flat, good light, hold steady.")
 
     return process(raw)
