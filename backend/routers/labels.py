@@ -56,18 +56,21 @@ def list_labels(
     category: str = "",
     db: Session = Depends(get_db),
 ):
-    query = db.query(Label)
-    if brand:
-        query = query.filter(Label.brand == brand)
-    if category:
-        query = query.filter(Label.category == category)
-    if search:
-        search_lower = f"%{search.lower()}%"
-        query = query.filter(
-            (Label.flavor.ilike(search_lower)) | (Label.item_code.ilike(search_lower))
-        )
-    labels = query.order_by(Label.brand, Label.label_name).all()
-    return [l.to_dict() for l in labels]
+    try:
+        query = db.query(Label)
+        if brand:
+            query = query.filter(Label.brand == brand)
+        if category:
+            query = query.filter(Label.category == category)
+        if search:
+            search_lower = f"%{search.lower()}%"
+            query = query.filter(
+                (Label.flavor.ilike(search_lower)) | (Label.item_code.ilike(search_lower))
+            )
+        labels = query.order_by(Label.brand, Label.label_name).all()
+        return [l.to_dict() for l in labels]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{label_id}")
