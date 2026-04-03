@@ -23,12 +23,8 @@ export default function App() {
 
   const handleSearch = (e) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
-      navigate(`/brand/all?cat=juice`)
-      setSidebarOpen(false)
-      // The Dashboard will pick up the search from the URL or we pass via state
-      // For now, navigate to all inventory — user can filter from there
-      window.__globalSearch = searchQuery.trim()
       navigate(`/brand/all?search=${encodeURIComponent(searchQuery.trim())}`)
+      setSidebarOpen(false)
       setSearchQuery('')
     }
   }

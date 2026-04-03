@@ -22,13 +22,15 @@ export default function Dashboard() {
   const activeBrand = urlBrand === 'all' ? '' : (urlBrand || '')
 
   const [allItems, setAllItems] = useState([])
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => searchParams.get('search') || '')
   const [category, setCategory] = useState(() => searchParams.get('cat') || 'juice')
 
-  // Sync category when navigating between category cards on home
+  // Sync params when navigating
   useEffect(() => {
     const cat = searchParams.get('cat')
     if (cat) setCategory(cat)
+    const q = searchParams.get('search')
+    if (q) setSearch(q)
   }, [searchParams])
   const [sizeFilter, setSizeFilter] = useState('')
   const [brandFilter, setBrandFilter] = useState('')
