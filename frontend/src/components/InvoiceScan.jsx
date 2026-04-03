@@ -1,7 +1,81 @@
 import { useState, useRef } from 'react'
-import { Upload, FileText, Check, X, Loader2, Camera, Image, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Upload, FileText, Check, X, Loader2, Camera, Image, RotateCcw, AlertTriangle, Search } from 'lucide-react'
 import { scanInvoice, confirmInvoice } from '../api'
 import { ARTE_NAVY } from './CitrusIcon'
+
+function ProductPicker({ labels, value, onChange, highlighted }) {
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const selected = labels.find(l => l.item_code === value)
+  const filtered = search
+    ? labels.filter(l =>
+        l.label_name.toLowerCase().includes(search.toLowerCase()) ||
+        l.item_code.toLowerCase().includes(search.toLowerCase()) ||
+        l.flavor.toLowerCase().includes(search.toLowerCase()) ||
+        l.brand.toLowerCase().includes(search.toLowerCase())
+      )
+    : labels
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`w-full border rounded-xl px-3 py-2.5 text-sm font-medium text-left focus:outline-none focus:ring-2 focus:ring-orange-300 flex items-center justify-between ${
+          value ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+          highlighted ? 'bg-amber-50 border-amber-300 text-amber-700 animate-pulse' :
+          'bg-stone-50 border-stone-200 text-stone-500'
+        }`}
+      >
+        <span className="truncate">
+          {selected ? `${selected.label_name} (${selected.item_code})` : '— select product —'}
+        </span>
+        <Search size={14} className="flex-shrink-0 ml-1 opacity-40" />
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-stone-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-stone-100">
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, code, brand..."
+              className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => { onChange(''); setOpen(false); setSearch('') }}
+              className="w-full text-left px-3 py-2 text-sm text-stone-400 hover:bg-stone-50"
+            >
+              — none —
+            </button>
+            {filtered.slice(0, 50).map((l) => (
+              <button
+                key={l.item_code}
+                type="button"
+                onClick={() => { onChange(l.item_code); setOpen(false); setSearch('') }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-orange-50 transition ${
+                  l.item_code === value ? 'bg-emerald-50 font-bold' : ''
+                }`}
+              >
+                <span className="font-medium text-stone-800">{l.label_name}</span>
+                <span className="text-[10px] text-stone-400 ml-1.5">{l.item_code}</span>
+                <span className="text-[9px] text-stone-300 ml-1">({l.brand})</span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-center text-stone-400 text-xs py-3">No matches</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function InvoiceScan({ labels, onConfirmed }) {
   const [file, setFile] = useState(null)
@@ -219,9 +293,9 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             style={{ backgroundColor: ARTE_NAVY }}
           >
             {scanning ? (
-              <><Loader2 size={18} className="animate-spin" /> Scanning invoice (auto-retries)...</>
+              <><Loader2 size={18} className="animate-spin" /> Reading document (auto-retries)...</>
             ) : (
-              <><FileText size={18} /> Scan Invoice</>
+              <><FileText size={18} /> Scan Document</>
             )}
           </button>
         </div>
@@ -305,11 +379,32 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             </button>
           </div>
 
+          {/* Summary bar */}
+          {(() => {
+            const matched = editItems.filter(i => i._enabled && i.matched_item_code).length
+            const unmatched = editItems.filter(i => i._enabled && !i.matched_item_code).length
+            const noQty = editItems.filter(i => i._enabled && (!i.quantity_bottles || parseInt(i.quantity_bottles) === 0)).length
+            return (
+              <div className="flex gap-2 text-xs font-bold">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700">{matched} matched</span>
+                {unmatched > 0 && <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700">{unmatched} need match</span>}
+                {noQty > 0 && <span className="px-2.5 py-1 rounded-lg bg-red-100 text-red-700">{noQty} missing qty</span>}
+              </div>
+            )
+          })()}
+
           {/* Item rows */}
           <div className="space-y-3">
-            {editItems.map((item, idx) => (
+            {editItems.map((item, idx) => {
+              const warnings = item.warnings || []
+              const hasWarning = warnings.length > 0
+              return (
               <div key={idx}
-                className={`bg-white rounded-2xl p-4 border shadow-sm transition ${item._enabled ? 'border-stone-200' : 'border-stone-100 opacity-50'}`}>
+                className={`bg-white rounded-2xl p-4 border shadow-sm transition ${
+                  !item._enabled ? 'border-stone-100 opacity-50' :
+                  !item.matched_item_code ? 'border-amber-300 bg-amber-50/30' :
+                  'border-stone-200'
+                }`}>
 
                 <div className="flex items-start gap-3 mb-3">
                   <button onClick={() => updateItem(idx, '_enabled', !item._enabled)}
@@ -319,6 +414,21 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                   <div className="flex-1">
                     <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Description</label>
                     <p className="text-sm font-medium text-stone-800">{item.description}</p>
+                    {/* Warning badges */}
+                    {hasWarning && item._enabled && (
+                      <div className="flex gap-1.5 mt-1.5">
+                        {warnings.includes('no_match') && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold flex items-center gap-0.5">
+                            <AlertTriangle size={9} /> Select product below
+                          </span>
+                        )}
+                        {warnings.includes('no_qty') && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-bold flex items-center gap-0.5">
+                            <AlertTriangle size={9} /> Enter quantity
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -332,10 +442,14 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                     </div>
                   )}
                   <div>
-                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Bottles</label>
+                    <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1 ${
+                      warnings.includes('no_qty') ? 'text-red-500' : 'text-stone-400'
+                    }`}>Qty ({item.raw_unit || 'units'})</label>
                     <input type="number" value={item.quantity_bottles || 0}
                       onChange={(e) => updateItem(idx, 'quantity_bottles', e.target.value)}
-                      className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                      className={`w-full border rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-300 ${
+                        warnings.includes('no_qty') ? 'bg-red-50 border-red-300' : 'bg-white border-stone-200'
+                      }`} />
                   </div>
                   {item.unit_price != null && (
                     <div>
@@ -348,20 +462,21 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Match Product</label>
-                  <select value={item.matched_item_code}
-                    onChange={(e) => updateItem(idx, 'matched_item_code', e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-300 ${
-                      item.matched_item_code ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-700'
-                    }`}>
-                    <option value="">— select product —</option>
-                    {labels.map((l) => (
-                      <option key={l.item_code} value={l.item_code}>{l.label_name} ({l.item_code})</option>
-                    ))}
-                  </select>
+                  <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1 ${
+                    !item.matched_item_code && item._enabled ? 'text-amber-600' : 'text-stone-400'
+                  }`}>
+                    {item.matched_item_code ? 'Matched Product' : 'Select Product'}
+                  </label>
+                  {/* Searchable product picker */}
+                  <ProductPicker
+                    labels={labels}
+                    value={item.matched_item_code}
+                    onChange={(code) => updateItem(idx, 'matched_item_code', code)}
+                    highlighted={!item.matched_item_code && item._enabled}
+                  />
                 </div>
               </div>
-            ))}
+            )})}
           </div>
 
           <button onClick={handleConfirm}

@@ -80,9 +80,39 @@ def match_product(desc: str, item_no: str) -> str | None:
     return None
 
 
-def process(raw: dict) -> dict:
+def match_product_db(desc: str, item_no: str, db_labels) -> str | None:
+    """Try to match against actual DB items."""
+    d = desc.lower()
+    n = (item_no or "").strip().upper()
+
+    # Exact item code match
+    for label in db_labels:
+        if n and label.item_code.upper() == n:
+            return label.item_code
+
+    # Partial item code match (e.g. "FG-1516" in item_no)
+    for label in db_labels:
+        if n and n in label.item_code.upper():
+            return label.item_code
+
+    # Keyword match against label_name / flavor
+    best = None
+    best_score = 0
+    for label in db_labels:
+        words = label.label_name.lower().split()
+        score = sum(1 for w in words if len(w) > 2 and w in d)
+        if score > best_score and score >= 2:
+            best = label.item_code
+            best_score = score
+
+    return best
+
+
+def process(raw: dict, db_labels=None) -> dict:
     header = raw.get("header", {})
     items = []
+    missing_info = []
+
     for row in raw.get("rows", []):
         desc = str(row.get("desc", ""))
         no = str(row.get("no", ""))
@@ -97,9 +127,22 @@ def process(raw: dict) -> dict:
             if abs(calc - qty) > 1:
                 qty = calc
 
+        # Try hardcoded match first, then DB match
         matched = match_product(desc, no)
+        if not matched and db_labels:
+            matched = match_product_db(desc, no, db_labels)
+
         case_size = 6
         bottles = qty * case_size if "case" in unit.lower() else qty
+
+        # Track what's missing
+        warnings = []
+        if not matched:
+            warnings.append("no_match")
+        if qty == 0:
+            warnings.append("no_qty")
+        if not desc or desc.lower() in ("", "nan"):
+            warnings.append("no_desc")
 
         items.append({
             "description": f"{desc} [{no}]" if no else desc,
@@ -107,6 +150,9 @@ def process(raw: dict) -> dict:
             "quantity_cases": qty if "case" in unit.lower() else None,
             "unit_price": price if price > 0 else None,
             "matched_item_code": matched,
+            "warnings": warnings,
+            "raw_item_no": no,
+            "raw_unit": unit,
         })
 
     return {
@@ -127,10 +173,23 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
 
     b64, mime = compress_image(file_bytes)
 
+    # Build list of known items for smarter matching
+    known = db.query(Label).all()
+    item_hints = ", ".join(f"{l.item_code}={l.label_name}" for l in known[:80])
+
     prompt = (
-        'Read this invoice table. For each row give: no (item number like FG-1516), '
-        'desc (full text with flavor name like Lime/Lemon/Grapefruit/Orange), '
-        'qty (quantity number), unit (Case/Bottle), price (unit price), total (line total). '
+        'Read this document carefully. It could be an invoice, delivery note, packing slip, '
+        'handwritten note, spreadsheet screenshot, receipt, or any inventory-related document. '
+        'Extract every item/product you can find with quantities. '
+        'For each item give: no (item number/code if visible, e.g. FG-1516, RM-1042), '
+        'desc (full product description — include flavor, size, brand), '
+        'qty (quantity number — look for quantities, counts, amounts), '
+        'unit (Case/Bottle/Box/Each/KG/L/LB — whatever unit is shown), '
+        'price (unit price if visible, else 0), total (line total if visible, else 0). '
+        f'Known inventory items for matching: [{item_hints}]. '
+        'If you see items matching known codes, use those exact codes in the "no" field. '
+        'If info is missing (no qty, unclear item), still include the row with what you can read — '
+        'set qty to 0 and describe what you see in desc. '
         'Return JSON: {"header":{"inv":"","company":"","date":""},"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
     )
 
@@ -187,6 +246,6 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
             pass
 
     if not raw or not raw.get("rows"):
-        raise ValueError("Could not read invoice. Lay it flat, good light, hold steady.")
+        raise ValueError("Could not read document. Make sure text is clear and readable.")
 
-    return process(raw)
+    return process(raw, db_labels=known)

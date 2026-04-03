@@ -30,9 +30,9 @@ export default function ScanPage() {
           <ArrowLeft size={18} className="text-stone-500" />
         </button>
         <div>
-          <h1 className="text-xl font-bold" style={{ color: ARTE_NAVY }}>Invoice Scan</h1>
+          <h1 className="text-xl font-bold" style={{ color: ARTE_NAVY }}>Smart Scanner</h1>
           <p className="text-stone-400 text-[10px] uppercase tracking-[0.15em] font-semibold">
-            Upload a delivery invoice to auto-extract items
+            Scan any document — invoices, notes, packing slips, receipts
           </p>
         </div>
       </div>
