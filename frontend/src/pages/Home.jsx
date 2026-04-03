@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Tag, Wine, Leaf, Droplets, Box, Package, AlertTriangle } from 'lucide-react'
+import { Tag, Wine, Leaf, Droplets, Box, Package, AlertTriangle, Clock } from 'lucide-react'
 import { ARTE_NAVY, getBrandColor } from '../components/CitrusIcon'
 import { fetchLabels } from '../api'
 
@@ -79,6 +79,7 @@ export default function Home() {
   const [totalItems, setTotalItems] = useState(0)
   const [totalStock, setTotalStock] = useState(0)
   const [lowStock, setLowStock] = useState([])
+  const [expiringSoon, setExpiringSoon] = useState([])
   const [brandCounts, setBrandCounts] = useState({})
 
   useEffect(() => {
@@ -97,10 +98,25 @@ export default function Home() {
       setBrandCounts(bc)
       setTotalItems(items.length)
       setTotalStock(stock)
-      // Items with stock > 0 but running low (under 100), show up to 25
-      const withStock = items.filter(i => i.current_stock_bottles > 0 && i.current_stock_bottles < 100)
-      withStock.sort((a, b) => a.current_stock_bottles - b.current_stock_bottles)
-      setLowStock(withStock.slice(0, 25))
+      // Smart low stock: use per-item min_stock if set, else default 100
+      const low = items.filter(i => {
+        const threshold = i.min_stock > 0 ? i.min_stock : 100
+        return i.current_stock_bottles > 0 && i.current_stock_bottles < threshold
+      })
+      low.sort((a, b) => a.current_stock_bottles - b.current_stock_bottles)
+      setLowStock(low.slice(0, 25))
+      // Expiring soon: items with expiry_date within 30 days or already expired
+      const today = new Date()
+      const soon = items.filter(i => {
+        if (!i.expiry_date) return false
+        const exp = new Date(i.expiry_date)
+        const daysLeft = Math.ceil((exp - today) / 86400000)
+        return daysLeft <= 30
+      }).map(i => {
+        const daysLeft = Math.ceil((new Date(i.expiry_date) - today) / 86400000)
+        return { ...i, daysLeft }
+      }).sort((a, b) => a.daysLeft - b.daysLeft)
+      setExpiringSoon(soon.slice(0, 15))
     }).catch(() => {})
   }, [])
 
@@ -215,6 +231,41 @@ export default function Home() {
                   <div className="text-right ml-3">
                     <span className="text-lg font-extrabold text-red-600">{item.current_stock_bottles}</span>
                     <p className="text-[9px] text-stone-400 uppercase font-bold">{item.unit_of_measure}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Expiring Soon */}
+      {expiringSoon.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+              <Clock size={16} className="text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold" style={{ color: ARTE_NAVY }}>Expiring Soon</h2>
+              <p className="text-[10px] text-stone-400 font-medium">Within 30 days or expired</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-amber-100 overflow-hidden shadow-sm max-h-64 overflow-y-auto">
+            <div className="divide-y divide-stone-100">
+              {expiringSoon.map((item) => (
+                <div key={item.id} className="flex items-center justify-between px-4 py-3 hover:bg-amber-50/30 transition">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-stone-800 truncate">{item.flavor}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase text-white"
+                        style={{ backgroundColor: getBrandColor(item.brand) }}>{item.brand}</span>
+                      <span className="text-[10px] text-stone-400">{item.expiry_date}</span>
+                    </div>
+                  </div>
+                  <div className="text-right ml-3">
+                    <span className={`text-sm font-extrabold ${item.daysLeft <= 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                      {item.daysLeft <= 0 ? 'EXPIRED' : `${item.daysLeft}d`}
+                    </span>
                   </div>
                 </div>
               ))}

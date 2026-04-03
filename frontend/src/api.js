@@ -101,3 +101,17 @@ export async function deleteJournalEntry(id) {
   const res = await request(`/api/journal/${id}`, { method: 'DELETE' })
   return res.json()
 }
+
+export async function fetchHistory(labelId) {
+  const res = await request(`/api/labels/${labelId}/history`)
+  return res.json()
+}
+
+export async function bulkCount(items) {
+  const res = await request('/api/labels/bulk-count', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items),
+  })
+  return res.json()
+}

@@ -17,6 +17,9 @@ export default function AddLabelModal({ onClose, onSaved, editLabel }) {
     unit_of_measure: editLabel?.unit_of_measure || 'BTL',
     case_quantity: editLabel?.case_quantity || 6,
     shelf_life_days: editLabel?.shelf_life_days || 365,
+    min_stock: editLabel?.min_stock || 0,
+    reorder_qty: editLabel?.reorder_qty || 0,
+    expiry_date: editLabel?.expiry_date || '',
     notes: editLabel?.notes || '',
   })
   const [error, setError] = useState('')
@@ -29,7 +32,11 @@ export default function AddLabelModal({ onClose, onSaved, editLabel }) {
     setError('')
     try {
       if (isEdit) {
-        await updateLabel(editLabel.id, { item_code: form.item_code, location_code: form.location_code, notes: form.notes })
+        await updateLabel(editLabel.id, {
+          item_code: form.item_code, location_code: form.location_code,
+          min_stock: parseInt(form.min_stock) || 0, reorder_qty: parseInt(form.reorder_qty) || 0,
+          expiry_date: form.expiry_date || null, notes: form.notes,
+        })
       } else {
         await createLabel({ ...form, case_quantity: parseInt(form.case_quantity), shelf_life_days: parseInt(form.shelf_life_days) })
       }
@@ -118,6 +125,20 @@ export default function AddLabelModal({ onClose, onSaved, editLabel }) {
             <div>
               <label className={labelCls}>Location</label>
               <input value={form.location_code} onChange={set('location_code')} className={inputCls} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>Min Stock</label>
+              <input type="number" value={form.min_stock} onChange={set('min_stock')} className={inputCls} placeholder="0" />
+            </div>
+            <div>
+              <label className={labelCls}>Reorder Qty</label>
+              <input type="number" value={form.reorder_qty} onChange={set('reorder_qty')} className={inputCls} placeholder="0" />
+            </div>
+            <div>
+              <label className={labelCls}>Expiry Date</label>
+              <input type="date" value={form.expiry_date} onChange={set('expiry_date')} className={inputCls} />
             </div>
           </div>
           <div>

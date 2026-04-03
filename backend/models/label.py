@@ -19,6 +19,9 @@ class Label(Base):
     case_quantity = Column(Integer, nullable=False, default=6)
     shelf_life_days = Column(Integer, nullable=False)
     current_stock_bottles = Column(Integer, nullable=False, default=0)
+    min_stock = Column(Integer, nullable=False, default=0)
+    reorder_qty = Column(Integer, nullable=False, default=0)
+    expiry_date = Column(String(10), nullable=True)
     last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
     notes = Column(Text, default="")
 
@@ -43,5 +46,8 @@ class Label(Base):
             "current_stock_bottles": self.current_stock_bottles,
             "current_stock_cases": self.current_stock_cases,
             "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "min_stock": self.min_stock,
+            "reorder_qty": self.reorder_qty,
+            "expiry_date": self.expiry_date,
             "notes": self.notes or "",
         }

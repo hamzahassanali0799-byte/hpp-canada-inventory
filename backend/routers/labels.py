@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.db.database import get_db
 from backend.models.label import Label
+from backend.models.journal_entry import JournalEntry
 from backend.services.bc_client import create_journal_entry
 from datetime import date
 
@@ -22,13 +23,24 @@ class LabelCreate(BaseModel):
     case_quantity: int = 6
     shelf_life_days: int
     current_stock_bottles: int = 0
+    min_stock: int = 0
+    reorder_qty: int = 0
+    expiry_date: str | None = None
     notes: str = ""
 
 
 class LabelUpdate(BaseModel):
     item_code: str | None = None
     location_code: str | None = None
+    min_stock: int | None = None
+    reorder_qty: int | None = None
+    expiry_date: str | None = None
     notes: str | None = None
+
+
+class BulkCountItem(BaseModel):
+    label_id: int
+    actual_count: int
 
 
 class StockAdjust(BaseModel):
@@ -125,3 +137,54 @@ def adjust_stock(label_id: int, data: StockAdjust, db: Session = Depends(get_db)
     )
 
     return label.to_dict()
+
+
+@router.get("/{label_id}/history")
+def get_history(label_id: int, db: Session = Depends(get_db)):
+    label = db.query(Label).filter(Label.id == label_id).first()
+    if not label:
+        raise HTTPException(status_code=404, detail="Label not found")
+    entries = (
+        db.query(JournalEntry)
+        .filter(JournalEntry.item_no == label.item_code)
+        .order_by(JournalEntry.created_at.desc())
+        .limit(15)
+        .all()
+    )
+    return [
+        {
+            "id": e.id,
+            "entry_type": e.entry_type,
+            "quantity": e.quantity,
+            "description": e.description,
+            "posting_date": e.posting_date,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in entries
+    ]
+
+
+@router.post("/bulk-count")
+def bulk_count(items: list[BulkCountItem], db: Session = Depends(get_db)):
+    results = []
+    for item in items:
+        label = db.query(Label).filter(Label.id == item.label_id).first()
+        if not label:
+            continue
+        diff = item.actual_count - label.current_stock_bottles
+        if diff == 0:
+            continue
+        label.current_stock_bottles = max(0, item.actual_count)
+        entry_type = "Positive Adjmt." if diff > 0 else "Negative Adjmt."
+        create_journal_entry(
+            db=db,
+            item_no=label.item_code,
+            location_code=label.location_code,
+            entry_type=entry_type,
+            quantity=diff,
+            description=f"Cycle count — {label.label_name}",
+            posting_date=date.today().isoformat(),
+        )
+        results.append({"id": label.id, "item_code": label.item_code, "diff": diff})
+    db.commit()
+    return {"adjusted": len(results), "results": results}

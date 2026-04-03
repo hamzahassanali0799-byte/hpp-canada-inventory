@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Minus, Plus, Edit3, Trash2 } from 'lucide-react'
+import { Minus, Plus, Edit3, Trash2, AlertTriangle, Clock, History } from 'lucide-react'
+import { fetchHistory } from '../api'
 import { adjustStock, deleteLabel } from '../api'
 import BottleImage, { getCitrus, getBrandColor } from './CitrusIcon'
 
@@ -21,7 +22,10 @@ function getCategoryIcon(category) {
 
 export default function LabelCard({ label, onUpdate, onEdit }) {
   const [manualQty, setManualQty] = useState('')
+  const [adjustQty, setAdjustQty] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState([])
   const c = getCitrus(label.color_identifier, label.category)
   const shelf = getShelfBadge(label.shelf_life_days)
   const brandColor = getBrandColor(label.brand)
@@ -31,6 +35,24 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
 
   const isRaw = label.category === 'raw'
   const isMisc = label.category === 'misc'
+
+  // Low stock check
+  const minStock = label.min_stock > 0 ? label.min_stock : 0
+  const isLow = minStock > 0 && label.current_stock_bottles > 0 && label.current_stock_bottles < minStock
+
+  // Expiry check
+  const expiryDays = label.expiry_date ? Math.ceil((new Date(label.expiry_date) - new Date()) / 86400000) : null
+  const isExpired = expiryDays !== null && expiryDays <= 0
+  const isExpiringSoon = expiryDays !== null && expiryDays > 0 && expiryDays <= 30
+
+  const toggleHistory = async () => {
+    if (showHistory) { setShowHistory(false); return }
+    try {
+      const data = await fetchHistory(label.id)
+      setHistory(data)
+    } catch (e) { console.error(e) }
+    setShowHistory(true)
+  }
   const unitName = isBox ? 'units' : isLabel ? 'labels' : isRaw ? label.unit_of_measure.toLowerCase() : isMisc ? 'units' : 'bottles'
   const caseName = isBox ? 'packs' : isLabel ? 'boxes' : 'cases'
 
@@ -72,7 +94,7 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 bg-white border-2 border-stone-400">
+    <div className={`rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 bg-white border-2 ${isExpired ? 'border-red-400' : isLow ? 'border-amber-400' : 'border-stone-400'}`}>
       {/* Top color bar */}
       <div className="h-1.5" style={{ backgroundColor: c.labelColor }} />
 
@@ -100,13 +122,25 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
                 {shelf.label}
               </span>
             )}
+            {isExpired && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-red-100 text-red-700">EXP</span>
+            )}
+            {isExpiringSoon && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700">{expiryDays}d</span>
+            )}
           </div>
           <h3 className="text-sm font-bold truncate" style={{ color: brandColor }}>{label.flavor}</h3>
         </div>
-        <button onClick={() => onEdit(label)}
-          className="p-1.5 rounded-lg hover:bg-white/60 transition" style={{ color: brandColor }}>
-          <Edit3 size={14} />
-        </button>
+        <div className="flex flex-col gap-1">
+          <button onClick={() => onEdit(label)}
+            className="p-1.5 rounded-lg hover:bg-white/60 transition" style={{ color: brandColor }}>
+            <Edit3 size={14} />
+          </button>
+          <button onClick={toggleHistory}
+            className={`p-1.5 rounded-lg hover:bg-white/60 transition ${showHistory ? 'bg-white/80' : ''}`} style={{ color: brandColor }}>
+            <History size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="px-4 pb-4 pt-3">
@@ -154,7 +188,33 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
           </button>
         </div>
 
-        {/* +/- quick adjust */}
+        {/* Custom +/- adjust */}
+        <div className="flex items-center gap-1.5 mb-2">
+          <button
+            onClick={() => { const v = parseInt(adjustQty); if (v > 0) handleAdjust(-v); setAdjustQty('') }}
+            disabled={loading || !adjustQty}
+            className="px-2.5 py-2 rounded-lg text-xs font-bold text-white bg-red-400 hover:bg-red-500 transition disabled:opacity-40 shadow-sm"
+          >
+            <Minus size={12} />
+          </button>
+          <input
+            type="number"
+            min="1"
+            value={adjustQty}
+            onChange={(e) => setAdjustQty(e.target.value)}
+            placeholder="Qty"
+            className="flex-1 bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm text-center font-medium focus:outline-none focus:ring-2 focus:ring-stone-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          <button
+            onClick={() => { const v = parseInt(adjustQty); if (v > 0) handleAdjust(v); setAdjustQty('') }}
+            disabled={loading || !adjustQty}
+            className="px-2.5 py-2 rounded-lg text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 transition disabled:opacity-40 shadow-sm"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+
+        {/* Quick adjust */}
         <div className="flex items-center gap-1.5">
           <button onClick={() => handleAdjust(-1)} disabled={loading}
             className="p-2 rounded-lg border border-stone-200 hover:bg-red-50 text-stone-500 hover:text-red-500 transition disabled:opacity-40">
@@ -174,10 +234,42 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
           </button>
         </div>
 
+        {/* Low stock warning */}
+        {isLow && (
+          <div className="flex items-center gap-1.5 mt-2 px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200">
+            <AlertTriangle size={11} className="text-amber-600 flex-shrink-0" />
+            <span className="text-[10px] font-bold text-amber-700">Below min stock ({minStock})</span>
+          </div>
+        )}
+
+        {/* History panel */}
+        {showHistory && (
+          <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 max-h-36 overflow-y-auto">
+            {history.length === 0 ? (
+              <p className="text-[10px] text-stone-400 p-2 text-center">No history</p>
+            ) : history.map((h) => (
+              <div key={h.id} className="flex items-center justify-between px-2 py-1.5 border-b border-stone-100 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <span className={`text-[10px] font-bold ${h.quantity > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {h.quantity > 0 ? '+' : ''}{h.quantity}
+                  </span>
+                  <span className="text-[9px] text-stone-400 ml-1.5 truncate">{h.description}</span>
+                </div>
+                <span className="text-[9px] text-stone-400 ml-1 flex-shrink-0">{h.posting_date}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Footer */}
         <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-stone-100">
           <span className="text-[10px] font-mono text-stone-500 font-medium">{label.item_code}</span>
           <div className="flex items-center gap-2">
+            {label.expiry_date && (
+              <span className={`text-[9px] font-bold ${isExpired ? 'text-red-500' : isExpiringSoon ? 'text-amber-600' : 'text-stone-400'}`}>
+                exp {label.expiry_date}
+              </span>
+            )}
             <span className="text-[10px] text-stone-400 font-medium">{label.location_code}</span>
             <button onClick={handleDelete} disabled={loading}
               className="p-1 rounded hover:bg-red-50 text-stone-300 hover:text-red-500 transition">
