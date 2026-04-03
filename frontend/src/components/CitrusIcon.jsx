@@ -25,8 +25,16 @@ export const ARTE_NAVY = '#1B2A4A'
 export const QUIRK_RED = '#E54B4B'
 export const JOOSY_GOLD = '#F5A623'
 
-export function getCitrus(colorId) {
-  return COLORS[colorId] || { label: colorId, bottleImg: null, labelColor: '#999', cardBg: '#f5f5f5', accent: '#999', emoji: '🧃' }
+// Category-based emoji fallbacks for items without specific color mappings
+const CATEGORY_EMOJI = {
+  juice: '🧃', label: '🏷️', bottle: '🫙', box: '📦',
+  raw: '🌿', misc: '🔧', cap: '🔘', pouch: '📦',
+}
+
+export function getCitrus(colorId, category) {
+  if (COLORS[colorId]) return COLORS[colorId]
+  const emoji = CATEGORY_EMOJI[category] || '📋'
+  return { label: colorId, bottleImg: null, labelColor: '#999', cardBg: '#f5f5f5', accent: '#999', emoji }
 }
 
 const BRAND_COLORS = {

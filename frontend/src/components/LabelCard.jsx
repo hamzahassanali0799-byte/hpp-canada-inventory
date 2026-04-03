@@ -22,7 +22,7 @@ function getCategoryIcon(category) {
 export default function LabelCard({ label, onUpdate, onEdit }) {
   const [manualQty, setManualQty] = useState('')
   const [loading, setLoading] = useState(false)
-  const c = getCitrus(label.color_identifier)
+  const c = getCitrus(label.color_identifier, label.category)
   const shelf = getShelfBadge(label.shelf_life_days)
   const brandColor = getBrandColor(label.brand)
   const isJuice = label.category === 'juice'
