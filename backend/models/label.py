@@ -30,24 +30,28 @@ class Label(Base):
         return self.current_stock_bottles // self.case_quantity if self.case_quantity else 0
 
     def to_dict(self):
+        try:
+            lu = self.last_updated.isoformat() if self.last_updated else None
+        except Exception:
+            lu = None
         return {
             "id": self.id,
-            "brand": self.brand,
-            "category": self.category,
-            "label_name": self.label_name,
-            "flavor": self.flavor,
-            "size": self.size,
-            "color_identifier": self.color_identifier,
-            "item_code": self.item_code,
-            "location_code": self.location_code,
-            "unit_of_measure": self.unit_of_measure,
-            "case_quantity": self.case_quantity,
-            "shelf_life_days": self.shelf_life_days,
-            "current_stock_bottles": self.current_stock_bottles,
+            "brand": self.brand or "",
+            "category": self.category or "",
+            "label_name": self.label_name or "",
+            "flavor": self.flavor or "",
+            "size": self.size or "",
+            "color_identifier": self.color_identifier or "",
+            "item_code": self.item_code or "",
+            "location_code": self.location_code or "",
+            "unit_of_measure": self.unit_of_measure or "",
+            "case_quantity": self.case_quantity or 1,
+            "shelf_life_days": self.shelf_life_days or 9999,
+            "current_stock_bottles": self.current_stock_bottles or 0,
             "current_stock_cases": self.current_stock_cases,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
-            "min_stock": self.min_stock,
-            "reorder_qty": self.reorder_qty,
+            "last_updated": lu,
+            "min_stock": self.min_stock or 0,
+            "reorder_qty": self.reorder_qty or 0,
             "expiry_date": self.expiry_date,
             "notes": self.notes or "",
         }

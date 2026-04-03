@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import traceback
 from fastapi.staticfiles import StaticFiles
 from backend.db.database import engine, SessionLocal, Base
 from backend.models.label import Label  # noqa: F401
@@ -45,6 +47,11 @@ async def check_api_key(request: Request, call_next):
         if key != API_KEY:
             raise HTTPException(status_code=401, detail="Invalid API key")
     return await call_next(request)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(status_code=500, content={"detail": str(exc), "trace": traceback.format_exc()[-500:]})
 
 
 app.include_router(labels.router)
