@@ -79,6 +79,7 @@ export default function Home() {
   const [totalItems, setTotalItems] = useState(0)
   const [totalStock, setTotalStock] = useState(0)
   const [lowStock, setLowStock] = useState([])
+  const [brandCounts, setBrandCounts] = useState({})
 
   useEffect(() => {
     fetchLabels().then((items) => {
@@ -88,7 +89,12 @@ export default function Home() {
         c[item.category] = (c[item.category] || 0) + 1
         stock += item.current_stock_bottles
       }
+      const bc = {}
+      for (const item of items) {
+        bc[item.brand] = (bc[item.brand] || 0) + 1
+      }
       setCounts(c)
+      setBrandCounts(bc)
       setTotalItems(items.length)
       setTotalStock(stock)
       // Items with stock > 0 but running low (bottom 10 by stock, excluding 0)
@@ -119,6 +125,30 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Brand strip */}
+      {Object.keys(brandCounts).length > 0 && (
+        <div className="mb-6 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-2 w-max">
+            {Object.entries(brandCounts)
+              .sort((a, b) => b[1] - a[1])
+              .map(([brand, count]) => (
+                <div
+                  key={brand}
+                  onClick={() => navigate(`/brand/${brand}`)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-stone-200 hover:shadow-md hover:scale-[1.02] transition cursor-pointer whitespace-nowrap"
+                >
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[9px] font-bold"
+                    style={{ backgroundColor: getBrandColor(brand) }}>
+                    {brand.charAt(0)}
+                  </div>
+                  <span className="text-xs font-bold text-stone-700">{brand}</span>
+                  <span className="text-[10px] text-stone-400 font-medium">{count}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Category grid */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -162,27 +192,33 @@ export default function Home() {
       {lowStock.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={18} className="text-red-500" />
-            <h2 className="text-base font-bold" style={{ color: ARTE_NAVY }}>Running Low</h2>
-            <span className="text-xs text-stone-400 font-medium">(&lt; 100 units)</span>
+            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+              <AlertTriangle size={16} className="text-red-500" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold" style={{ color: ARTE_NAVY }}>Running Low</h2>
+              <p className="text-[10px] text-stone-400 font-medium">Items under 100 units</p>
+            </div>
           </div>
-          <div className="bg-white rounded-2xl border border-red-100 divide-y divide-stone-100 overflow-hidden shadow-sm">
-            {lowStock.map((item) => (
-              <div key={item.id} className="flex items-center justify-between px-4 py-3 hover:bg-red-50/30 transition">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-stone-800 truncate">{item.flavor}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase text-white"
-                      style={{ backgroundColor: getBrandColor(item.brand) }}>{item.brand}</span>
-                    <span className="text-[10px] text-stone-400 font-mono">{item.item_code}</span>
+          <div className="bg-white rounded-2xl border border-red-100 overflow-hidden shadow-sm max-h-64 overflow-y-auto">
+            <div className="divide-y divide-stone-100">
+              {lowStock.map((item) => (
+                <div key={item.id} className="flex items-center justify-between px-4 py-3 hover:bg-red-50/30 transition">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-stone-800 truncate">{item.flavor}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase text-white"
+                        style={{ backgroundColor: getBrandColor(item.brand) }}>{item.brand}</span>
+                      <span className="text-[10px] text-stone-400 font-mono">{item.item_code}</span>
+                    </div>
+                  </div>
+                  <div className="text-right ml-3">
+                    <span className="text-lg font-extrabold text-red-600">{item.current_stock_bottles}</span>
+                    <p className="text-[9px] text-stone-400 uppercase font-bold">{item.unit_of_measure}</p>
                   </div>
                 </div>
-                <div className="text-right ml-3">
-                  <span className="text-lg font-extrabold text-red-600">{item.current_stock_bottles}</span>
-                  <p className="text-[9px] text-stone-400 uppercase font-bold">{item.unit_of_measure}</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
