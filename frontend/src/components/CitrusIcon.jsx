@@ -29,11 +29,22 @@ export function getCitrus(colorId) {
   return COLORS[colorId] || { label: colorId, bottleImg: null, labelColor: '#999', cardBg: '#f5f5f5', accent: '#999', emoji: '🧃' }
 }
 
+const BRAND_COLORS = {
+  'Quirkies':    '#E54B4B',
+  'Joosy':       '#F5A623',
+  'General':     '#8B7355',
+  'Drink Arte':  '#1B2A4A',
+  'Arte':        '#1B2A4A',
+  'HPPC':        '#2D6A4F',
+  'Well Juicery':'#52796F',
+  'Squoze':      '#E07B39',
+  'Notch':       '#3D405B',
+  'Singh':       '#9B2226',
+  'Bestropic':   '#0077B6',
+}
+
 export function getBrandColor(brand) {
-  if (brand === 'Quirkies') return QUIRK_RED
-  if (brand === 'Joosy') return JOOSY_GOLD
-  if (brand === 'General') return '#8B7355'
-  return ARTE_NAVY
+  return BRAND_COLORS[brand] || ARTE_NAVY
 }
 
 export default function BottleImage({ colorId, size = 'md' }) {

@@ -14,7 +14,9 @@ function getCategoryIcon(category) {
   if (category === 'label') return '🏷️'
   if (category === 'box') return '📦'
   if (category === 'bottle') return '🫙'
-  return null
+  if (category === 'raw') return '🌿'
+  if (category === 'misc') return '🔧'
+  return '📋'
 }
 
 export default function LabelCard({ label, onUpdate, onEdit }) {
@@ -27,8 +29,9 @@ export default function LabelCard({ label, onUpdate, onEdit }) {
   const isLabel = label.category === 'label'
   const isBox = label.category === 'box'
 
-  // Clear unit names based on category
-  const unitName = isBox ? 'units' : isLabel ? 'rolls' : 'bottles'
+  const isRaw = label.category === 'raw'
+  const isMisc = label.category === 'misc'
+  const unitName = isBox ? 'units' : isLabel ? 'labels' : isRaw ? label.unit_of_measure.toLowerCase() : isMisc ? 'units' : 'bottles'
   const caseName = isBox ? 'packs' : isLabel ? 'boxes' : 'cases'
 
   const handleAdjust = async (qty, mode = 'bottle') => {

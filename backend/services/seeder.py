@@ -86,10 +86,22 @@ SEED_LABELS = [
 ]
 
 
+def _load_bc_items():
+    import json, os
+    path = os.path.join(os.path.dirname(__file__), "bc_items.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    return []
+
+
 def seed_labels(db: Session):
     existing = db.query(Label).count()
     if existing > 0:
         return
     for data in SEED_LABELS:
         db.add(Label(**data))
+    for data in _load_bc_items():
+        if not db.query(Label).filter(Label.item_code == data["item_code"]).first():
+            db.add(Label(**data))
     db.commit()
