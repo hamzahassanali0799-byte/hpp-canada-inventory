@@ -121,7 +121,7 @@ export default function Dashboard() {
       {/* Main category tabs + total */}
       <div className="flex items-center gap-2">
         <div className="overflow-x-auto scrollbar-hide flex-1">
-          <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm w-max min-w-full">
+          <div className="flex rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm w-max">
             {MAIN_TABS.map(({ key, label }) => (
               <button
                 key={key}
