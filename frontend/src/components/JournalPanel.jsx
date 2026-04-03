@@ -35,7 +35,10 @@ export default function JournalPanel({ open, onClose, refreshKey }) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white border-l border-stone-200 z-40 flex flex-col shadow-2xl">
+    <>
+    {/* Backdrop — click to close */}
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 transition-opacity" onClick={onClose} />
+    <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white border-l border-stone-200 z-40 flex flex-col shadow-2xl animate-slide-in">
       <div className="flex items-center justify-between p-5 border-b border-stone-100">
         <div>
           <h2 className="font-bold text-lg text-stone-900">BC Journal</h2>
@@ -114,5 +117,6 @@ export default function JournalPanel({ open, onClose, refreshKey }) {
         ))}
       </div>
     </div>
+    </>
   )
 }

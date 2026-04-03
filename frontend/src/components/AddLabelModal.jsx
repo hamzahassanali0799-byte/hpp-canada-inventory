@@ -50,8 +50,8 @@ export default function AddLabelModal({ onClose, onSaved, editLabel }) {
   const labelCls = "block text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1"
 
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-stone-100 sticky top-0 bg-white rounded-t-2xl">
           <h2 className="text-lg font-bold" style={{ color: ARTE_NAVY }}>{isEdit ? 'Edit Item' : 'Add New Item'}</h2>
           <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-xl transition"><X size={18} className="text-stone-400" /></button>

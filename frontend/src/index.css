@@ -35,3 +35,41 @@ body {
 * {
   touch-action: manipulation;
 }
+
+/* Smooth slide-in for panels */
+@keyframes slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+
+/* Smooth fade-in for modals and cards */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Smooth page transitions */
+main {
+  animation: fade-in 0.15s ease-out;
+}
+
+/* Smooth number transitions */
+input[type="number"] {
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+/* Better button press feedback */
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Smooth scrolling everywhere */
+* {
+  scroll-behavior: smooth;
+}
