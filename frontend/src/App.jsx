@@ -28,20 +28,20 @@ export default function App() {
       </button>
 
       {/* Sidebar */}
-      <aside className={`fixed md:static inset-y-0 left-0 z-40 w-60 bg-white border-r border-stone-200 flex flex-col transition-transform duration-200 ${
+      <aside className={`fixed md:static inset-y-0 left-0 z-40 w-60 flex flex-col transition-transform duration-200 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-      }`}>
+      }`} style={{ backgroundColor: ARTE_NAVY }}>
         {/* Logo / branding */}
-        <div className="p-4 border-b border-stone-100 flex items-center gap-3">
-          <img src="/hpp-logo.png" alt="HPP Canada" className="h-10 w-10 object-contain" />
+        <div className="p-5 pb-4 flex items-center gap-3">
+          <img src="/hpp-logo.png" alt="HPP Canada" className="h-10 w-10 object-contain rounded-lg" />
           <div>
-            <h1 className="text-sm font-bold tracking-tight" style={{ color: ARTE_NAVY }}>HPP Canada</h1>
-            <p className="text-[9px] text-stone-400 uppercase tracking-[0.2em] font-bold">Inventory</p>
+            <h1 className="text-sm font-bold tracking-tight text-white">HPP Canada</h1>
+            <p className="text-[9px] text-white/40 uppercase tracking-[0.2em] font-bold">Inventory</p>
           </div>
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 px-3 pt-2 space-y-1">
           {NAV.map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
@@ -51,11 +51,10 @@ export default function App() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
                   isActive
-                    ? 'text-white shadow-sm'
-                    : 'text-stone-500 hover:text-stone-800 hover:bg-stone-50'
+                    ? 'bg-white/15 text-white shadow-sm'
+                    : 'text-white/50 hover:text-white hover:bg-white/10'
                 }`
               }
-              style={({ isActive }) => isActive ? { backgroundColor: ARTE_NAVY } : {}}
             >
               <Icon size={18} />
               {label}
@@ -65,12 +64,20 @@ export default function App() {
           {/* Journal — opens side panel */}
           <button
             onClick={() => { setJournalOpen(true); setJournalKey((k) => k + 1); setSidebarOpen(false) }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-stone-500 hover:text-stone-800 hover:bg-stone-50 transition"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/10 transition"
           >
             <FileSpreadsheet size={18} />
             Journal
           </button>
         </nav>
+
+        {/* Bottom branding */}
+        <div className="p-4 pt-2">
+          <div className="rounded-xl bg-white/5 p-3">
+            <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Processing Facility</p>
+            <p className="text-[10px] text-white/50 mt-0.5">Delta, BC</p>
+          </div>
+        </div>
       </aside>
 
       {/* Mobile overlay */}

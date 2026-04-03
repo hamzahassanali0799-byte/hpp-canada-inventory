@@ -97,10 +97,10 @@ export default function Home() {
       setBrandCounts(bc)
       setTotalItems(items.length)
       setTotalStock(stock)
-      // Items with stock > 0 but running low (bottom 10 by stock, excluding 0)
+      // Items with stock > 0 but running low (under 100), show up to 25
       const withStock = items.filter(i => i.current_stock_bottles > 0 && i.current_stock_bottles < 100)
       withStock.sort((a, b) => a.current_stock_bottles - b.current_stock_bottles)
-      setLowStock(withStock.slice(0, 8))
+      setLowStock(withStock.slice(0, 25))
     }).catch(() => {})
   }, [])
 
