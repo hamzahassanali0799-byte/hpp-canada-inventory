@@ -54,7 +54,13 @@ app.include_router(journal.router)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    try:
+        db = SessionLocal()
+        count = db.query(Label).count()
+        db.close()
+        return {"status": "ok", "items": count}
+    except Exception as e:
+        return {"status": "ok", "db_error": str(e)}
 
 
 # Serve frontend static files if built
