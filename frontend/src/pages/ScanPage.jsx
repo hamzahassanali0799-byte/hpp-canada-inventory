@@ -43,7 +43,7 @@ export default function ScanPage() {
         </div>
       )}
 
-      <InvoiceScan labels={labels} onConfirmed={handleConfirmed} />
+      <InvoiceScan labels={labels} onConfirmed={handleConfirmed} onLabelsChanged={() => fetchLabels().then(setLabels).catch(console.error)} />
     </div>
   )
 }

@@ -14,12 +14,12 @@ def compress_image(file_bytes: bytes) -> tuple[str, str]:
     img = Image.open(io.BytesIO(file_bytes))
     if img.mode != "RGB":
         img = img.convert("RGB")
-    # Resize to 900px wide — smaller payload, still readable for AI
-    if img.width > 900:
-        ratio = 900 / img.width
-        img = img.resize((900, int(img.height * ratio)), Image.LANCZOS)
+    # Resize to 1400px wide — readable for AI text extraction
+    if img.width > 1400:
+        ratio = 1400 / img.width
+        img = img.resize((1400, int(img.height * ratio)), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=72)
+    img.save(buf, format="JPEG", quality=82)
     return base64.standard_b64encode(buf.getvalue()).decode("utf-8"), "image/jpeg"
 
 
@@ -178,11 +178,19 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     item_hints = ", ".join(f"{l.item_code}={l.label_name}" for l in known[:80])
 
     prompt = (
-        'Extract all items from this invoice/packing slip/delivery note. '
-        'For each line: no=item code (e.g. FG-1516), desc=product name with flavor/size/brand, '
-        'qty=quantity (0 if unclear), unit=Case/Bottle/Each/KG/L, price=unit price, total=line total. '
-        f'Known items: [{item_hints}]. Use exact codes when matched. '
-        'Return ONLY JSON: {"header":{"inv":"","company":"","date":""},"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
+        'Read this invoice/packing slip/delivery note EXACTLY as printed. '
+        'Do NOT paraphrase, interpret, or correct any text. Copy every word and number character-for-character.\n\n'
+        'CRITICAL RULES:\n'
+        '- Item codes (e.g. FG-1516, FG-1515, FG-1514) must be copied EXACTLY. Never substitute digits.\n'
+        '- Product descriptions must be copied verbatim from the document.\n'
+        '- Quantities: read the EXACT number printed. Never default to 0 if a number is visible.\n'
+        '- Each row in the document = one row in output. Do NOT merge or duplicate rows.\n\n'
+        'For each line item extract: no=item code, desc=full product description as printed, '
+        'qty=quantity number, unit=Case/Bottle/Each/KG/L, price=unit price, total=line total.\n\n'
+        f'Known inventory items for reference (use for matching only, always prefer document text): [{item_hints}]\n\n'
+        'Return ONLY valid JSON:\n'
+        '{"header":{"inv":"invoice number","company":"company name","date":"date"},'
+        '"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
     )
 
     raw = None
@@ -201,7 +209,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                     },
                     json={
                         "model": "claude-haiku-4-5-20251001",
-                        "max_tokens": 1024,
+                        "max_tokens": 2048,
                         "temperature": 0,
                         "messages": [{"role": "user", "content": [
                             {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},

@@ -1,9 +1,40 @@
 import { useState, useRef } from 'react'
-import { Upload, FileText, Check, X, Loader2, Camera, Image, RotateCcw, AlertTriangle, Search } from 'lucide-react'
-import { scanInvoice, confirmInvoice } from '../api'
+import { Upload, FileText, Check, X, Loader2, Camera, Image, RotateCcw, AlertTriangle, Search, Plus } from 'lucide-react'
+import { scanInvoice, confirmInvoice, fetchLabels } from '../api'
 import { ARTE_NAVY } from './CitrusIcon'
+import AddLabelModal from './AddLabelModal'
 
-function ProductPicker({ labels, value, onChange, highlighted }) {
+function parseDescription(desc, rawItemNo) {
+  const d = (desc || '').toLowerCase()
+  let brand = 'Arte'
+  if (d.includes('quirk')) brand = 'Quirkies'
+  else if (d.includes('joosy') || d.includes('juicy')) brand = 'Joosy'
+  let size = '1L'
+  const sizeMatch = d.match(/(\d+)\s*(ml|l|litre|liter)/i)
+  if (sizeMatch) {
+    size = sizeMatch[2].toLowerCase() === 'l' ? `${sizeMatch[1]}L` : `${sizeMatch[1]}mL`
+  }
+  const flavors = ['orange', 'lime', 'lemon', 'grapefruit', 'blueberry', 'apple', 'tropical', 'mandarin', 'sunshine']
+  let flavor = ''
+  for (const f of flavors) {
+    if (d.includes(f)) { flavor = f.charAt(0).toUpperCase() + f.slice(1); break }
+  }
+  const brandCode = { 'Arte': 'ARTE', 'Quirkies': 'QRKS', 'Joosy': 'JOOS' }[brand] || 'GENL'
+  const flavorCode = flavor.substring(0, 3).toUpperCase() || 'UNK'
+  const sizeCode = size.replace('mL', '').replace('L', 'L')
+  const itemCode = `${brandCode}-${flavorCode}-${sizeCode}-BTL`
+  return {
+    brand, flavor, size,
+    label_name: `${brand} ${flavor}`.trim(),
+    item_code: itemCode,
+    color_identifier: `${brand.toLowerCase()}-${flavor.toLowerCase()}`,
+    category: 'juice',
+    case_quantity: 6,
+    shelf_life_days: 365,
+  }
+}
+
+function ProductPicker({ labels, value, onChange, highlighted, onCreateNew }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
 
@@ -70,6 +101,15 @@ function ProductPicker({ labels, value, onChange, highlighted }) {
             {filtered.length === 0 && (
               <p className="text-center text-stone-400 text-xs py-3">No matches</p>
             )}
+            {onCreateNew && (
+              <button
+                type="button"
+                onClick={() => { setOpen(false); setSearch(''); onCreateNew() }}
+                className="w-full text-left px-3 py-2.5 text-sm font-bold text-orange-600 hover:bg-orange-50 border-t border-stone-100 sticky bottom-0 bg-white flex items-center gap-1.5"
+              >
+                <Plus size={14} /> Create New Product
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -84,17 +124,20 @@ const STAGE_LABELS = {
   extracting: 'Extracting items',
 }
 
-export default function InvoiceScan({ labels, onConfirmed }) {
+export default function InvoiceScan({ labels, onConfirmed, onLabelsChanged }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [scanStage, setScanStage] = useState(null)
+  const [elapsed, setElapsed] = useState(0)
   const [result, setResult] = useState(null)
   const [editItems, setEditItems] = useState([])
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const [mode, setMode] = useState('add') // 'add' or 'remove'
+  const [newProductForIdx, setNewProductForIdx] = useState(null)
+  const [newProductDefaults, setNewProductDefaults] = useState({})
   const fileRef = useRef()
   const cameraRef = useRef()
   const stageTimersRef = useRef([])
@@ -117,8 +160,9 @@ export default function InvoiceScan({ labels, onConfirmed }) {
   }
 
   const clearStageTimers = () => {
-    stageTimersRef.current.forEach(clearTimeout)
+    stageTimersRef.current.forEach(clearInterval)
     stageTimersRef.current = []
+    setElapsed(0)
   }
 
   const handleScan = async () => {
@@ -130,10 +174,16 @@ export default function InvoiceScan({ labels, onConfirmed }) {
     // Stage transitions: uploading → analyzing → extracting
     setScanStage('uploading')
     clearStageTimers()
-    stageTimersRef.current = [
-      setTimeout(() => setScanStage('analyzing'), 2000),
-      setTimeout(() => setScanStage('extracting'), 9000),
-    ]
+    const startTime = Date.now()
+    const analyzeAt = 1500 + Math.random() * 1000
+    const extractAt = 5000 + Math.random() * 3000
+    const ticker = setInterval(() => {
+      const el = Math.floor((Date.now() - startTime) / 1000)
+      setElapsed(el)
+      if (Date.now() - startTime > extractAt) setScanStage('extracting')
+      else if (Date.now() - startTime > analyzeAt) setScanStage('analyzing')
+    }, 500)
+    stageTimersRef.current = [ticker]
 
     // Retry up to 3 times on failure
     let lastError = ''
@@ -145,12 +195,16 @@ export default function InvoiceScan({ labels, onConfirmed }) {
           setScanStage('extracting')
           setResult(data)
           setEditItems(
-            data.items.map((item, i) => ({
-              ...item,
-              _id: i,
-              _enabled: true,
-              matched_item_code: item.matched_item_code || '',
-            }))
+            data.items.map((item, i) => {
+              const matchedLabel = labels.find(l => l.item_code === item.matched_item_code)
+              return {
+                ...item,
+                _id: i,
+                _enabled: true,
+                matched_item_code: item.matched_item_code || '',
+                _case_quantity: matchedLabel?.case_quantity || 6,
+              }
+            })
           )
           setRetryCount(attempt)
           setScanning(false)
@@ -176,6 +230,23 @@ export default function InvoiceScan({ labels, onConfirmed }) {
     setEditItems((prev) =>
       prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
     )
+  }
+
+  const updateCases = (idx, cases) => {
+    setEditItems(prev => prev.map((item, i) => {
+      if (i !== idx) return item
+      const caseQty = item._case_quantity || 6
+      return { ...item, quantity_cases: cases, quantity_bottles: cases * caseQty }
+    }))
+  }
+
+  const updateMatchedProduct = (idx, code) => {
+    const label = labels.find(l => l.item_code === code)
+    setEditItems(prev => prev.map((item, i) => i === idx ? {
+      ...item,
+      matched_item_code: code,
+      _case_quantity: label?.case_quantity || 6,
+    } : item))
   }
 
   const handleConfirm = async () => {
@@ -343,6 +414,11 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                   </div>
                 )
               })}
+              {elapsed > 0 && (
+                <div className="px-4 py-2 border-t border-stone-100 text-center">
+                  <span className="text-xs text-stone-400 font-medium">{elapsed}s elapsed</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -353,7 +429,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             style={{ backgroundColor: ARTE_NAVY }}
           >
             {scanning ? (
-              <><Loader2 size={18} className="animate-spin" /> Reading document...</>
+              <><Loader2 size={18} className="animate-spin" /> {STAGE_LABELS[scanStage] || 'Reading document'}...</>
             ) : (
               <><FileText size={18} /> Scan Document</>
             )}
@@ -493,14 +569,16 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-3">
-                  {item.quantity_cases != null && (
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Cases</label>
-                      <div className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-700">
-                        {item.quantity_cases}
-                      </div>
-                    </div>
-                  )}
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1 ${
+                      warnings.includes('no_qty') ? 'text-red-500' : 'text-stone-400'
+                    }`}>Cases</label>
+                    <input type="number" value={item.quantity_cases ?? ''}
+                      onChange={(e) => updateCases(idx, parseInt(e.target.value) || 0)}
+                      className={`w-full border rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-300 ${
+                        warnings.includes('no_qty') ? 'bg-red-50 border-red-300' : 'bg-white border-stone-200'
+                      }`} />
+                  </div>
                   <div>
                     <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1 ${
                       warnings.includes('no_qty') ? 'text-red-500' : 'text-stone-400'
@@ -531,8 +609,12 @@ export default function InvoiceScan({ labels, onConfirmed }) {
                   <ProductPicker
                     labels={labels}
                     value={item.matched_item_code}
-                    onChange={(code) => updateItem(idx, 'matched_item_code', code)}
+                    onChange={(code) => updateMatchedProduct(idx, code)}
                     highlighted={!item.matched_item_code && item._enabled}
+                    onCreateNew={() => {
+                      setNewProductForIdx(idx)
+                      setNewProductDefaults(parseDescription(item.description, item.raw_item_no))
+                    }}
                   />
                 </div>
               </div>
@@ -553,6 +635,24 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             )}
           </button>
         </div>
+      )}
+
+      {/* New product modal */}
+      {newProductForIdx !== null && (
+        <AddLabelModal
+          onClose={() => setNewProductForIdx(null)}
+          onSaved={async () => {
+            const updated = await fetchLabels()
+            const newLabel = updated.find(l => l.item_code === newProductDefaults.item_code)
+            if (newLabel) {
+              updateMatchedProduct(newProductForIdx, newLabel.item_code)
+            }
+            onLabelsChanged?.()
+            setNewProductForIdx(null)
+          }}
+          editLabel={null}
+          defaults={newProductDefaults}
+        />
       )}
     </div>
   )

@@ -3,24 +3,25 @@ import { X } from 'lucide-react'
 import { createLabel, updateLabel } from '../api'
 import { ARTE_NAVY } from './CitrusIcon'
 
-export default function AddLabelModal({ onClose, onSaved, editLabel }) {
+export default function AddLabelModal({ onClose, onSaved, editLabel, defaults }) {
   const isEdit = !!editLabel
+  const d = defaults || {}
   const [form, setForm] = useState({
-    brand: editLabel?.brand || 'Arte',
-    category: editLabel?.category || 'juice',
-    label_name: editLabel?.label_name || '',
-    flavor: editLabel?.flavor || '',
-    size: editLabel?.size || '1L',
-    color_identifier: editLabel?.color_identifier || 'arte-orange',
-    item_code: editLabel?.item_code || '',
-    location_code: editLabel?.location_code || 'MAIN',
-    unit_of_measure: editLabel?.unit_of_measure || 'BTL',
-    case_quantity: editLabel?.case_quantity || 6,
-    shelf_life_days: editLabel?.shelf_life_days || 365,
-    min_stock: editLabel?.min_stock || 0,
-    reorder_qty: editLabel?.reorder_qty || 0,
-    expiry_date: editLabel?.expiry_date || '',
-    notes: editLabel?.notes || '',
+    brand: editLabel?.brand || d.brand || 'Arte',
+    category: editLabel?.category || d.category || 'juice',
+    label_name: editLabel?.label_name || d.label_name || '',
+    flavor: editLabel?.flavor || d.flavor || '',
+    size: editLabel?.size || d.size || '1L',
+    color_identifier: editLabel?.color_identifier || d.color_identifier || 'arte-orange',
+    item_code: editLabel?.item_code || d.item_code || '',
+    location_code: editLabel?.location_code || d.location_code || 'MAIN',
+    unit_of_measure: editLabel?.unit_of_measure || d.unit_of_measure || 'BTL',
+    case_quantity: editLabel?.case_quantity || d.case_quantity || 6,
+    shelf_life_days: editLabel?.shelf_life_days || d.shelf_life_days || 365,
+    min_stock: editLabel?.min_stock || d.min_stock || 0,
+    reorder_qty: editLabel?.reorder_qty || d.reorder_qty || 0,
+    expiry_date: editLabel?.expiry_date || d.expiry_date || '',
+    notes: editLabel?.notes || d.notes || '',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
