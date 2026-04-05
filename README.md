@@ -1,74 +1,87 @@
-# Arte Label Inventory Management System
+# HPP Canada Inventory Management System
 
-HPP food & beverage label inventory tracker for Arte juice labels (drinkarte.com).
+Inventory tracker for HPP Canada beverage labels — Arte, Joosy, Quirks brands.
+
+## Stack
+
+- **Frontend** — React + Vite, deployed on **Vercel**
+- **Backend** — FastAPI + SQLite, deployed on **Railway**
+- **AI Scanner** — Claude Haiku 4.5 (primary), Gemini Flash 2.0 (fallback)
 
 ## Features
 
-- **Dashboard** — Card grid with real Arte bottle images, stock levels, +/- adjusters, shelf life badges
-- **Invoice Scan** — Upload invoice image → Groq AI (Llama 3.2 90B Vision) extracts line items → confirm & post
-- **BC Journal** — Every stock change queues a Business Central journal entry; export as CSV
-- **Add/Edit Labels** — Full CRUD with Arte bottle previews and brand colors
+- **Dashboard** — Card grid with bottle images, stock levels, +/- adjusters, reorder alerts, expiry tracking
+- **Smart Scanner** — Upload any document (invoices, packing slips, delivery notes, receipts) → AI extracts line items → searchable product picker → confirm & post to inventory
+- **Cycle Count** — Bulk stock counting
+- **Journal** — Every stock change logged; export as CSV
+- **Global Search** — Search across all inventory items
+- **Add/Remove Stock** — Toggle between adding and removing stock via scanner
 
-## Quick Start
+## Deployment
+
+| Service | URL | Auto-deploy |
+|---------|-----|-------------|
+| Frontend (Vercel) | Via `vercel.json` proxy | On push to master |
+| Backend (Railway) | `hpp-canada-inventory-production.up.railway.app` | On push to master |
+
+**Important:** The scanner bypasses Vercel's proxy (30s timeout) and calls Railway directly. The scan URL is configured in `frontend/src/api.js`.
+
+## Quick Start (Local)
 
 ### Backend
 ```bash
-cd label-inventory
 pip install -r backend/requirements.txt
-# Edit .env with your GROQ_API_KEY (free at console.groq.com)
 uvicorn backend.main:app --reload --port 8000
 ```
 
-### Frontend (dev)
+### Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000 — API proxied to :8000.
-
-### Production
-```bash
-cd frontend && npm run build
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
-```
+Open http://localhost:3000
 
 ## Environment Variables (.env)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GROQ_API_KEY` | For invoice scan | Free at console.groq.com |
+| `ANTHROPIC_API_KEY` | For scanner (primary) | Claude Haiku 4.5 vision |
+| `GEMINI_API_KEY` | For scanner (fallback) | Gemini Flash 2.0 |
 | `API_KEY` | Yes | API auth key (default: `changeme`) |
 | `BC_BASE_URL` | No | Business Central OData endpoint |
 | `BC_COMPANY_ID` | No | BC company GUID |
 | `BC_USERNAME` | No | BC auth username |
 | `BC_PASSWORD` | No | BC auth password |
 
-## AI Model
+## Scanner Details
 
-Uses **Llama 3.2 90B Vision** via Groq (free tier, no credit card needed).
-Handles invoice OCR, line item extraction, and fuzzy matching to known labels.
+- Images compressed to **900px wide, 72% JPEG quality** before sending to AI (faster upload, no accuracy loss)
+- Prompt includes up to 80 known inventory items as matching hints
+- Hardcoded FG code mapping + keyword matching + DB fuzzy matching
+- 3-step progress indicator: Uploading → Analyzing → Extracting
+- Auto-retry up to 3 times on failure
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/labels` | List labels (optional `?search=`) |
+| GET | `/api/labels` | List labels (optional `?search=&brand=&category=`) |
 | POST | `/api/labels` | Create label |
 | PATCH | `/api/labels/{id}` | Update label |
-| POST | `/api/labels/{id}/adjust` | Adjust stock |
-| POST | `/api/invoice/scan` | Scan invoice (multipart) |
-| POST | `/api/invoice/confirm` | Confirm scanned items |
+| DELETE | `/api/labels/{id}` | Delete label |
+| POST | `/api/labels/{id}/adjust` | Adjust stock (+/- bottles or cases) |
+| GET | `/api/labels/{id}/history` | Stock history for a label |
+| POST | `/api/labels/bulk-count` | Bulk cycle count |
+| POST | `/api/invoice/scan` | Scan document (multipart image/PDF) |
+| POST | `/api/invoice/confirm` | Confirm scanned items to inventory |
 | GET | `/api/journal` | List journal entries |
-| GET | `/api/journal/export/csv` | Download BC CSV |
-| DELETE | `/api/journal/{id}` | Delete entry |
+| GET | `/api/journal/export/csv` | Download CSV export |
+| DELETE | `/api/journal/{id}` | Delete journal entry |
 
-## Pre-Seeded Labels
+## Brands & Products
 
-| Label | Flavor | Size | Shelf Life | Item Code |
-|-------|--------|------|------------|-----------|
-| Arte Orange | Orange | 1L | 250 days | ARTE-ORG-1L |
-| Arte Lime | Lime | 1L | 395 days | ARTE-LME-1L |
-| Arte Lemon | Lemon | 1L | 395 days | ARTE-LMN-1L |
-| Arte Grapefruit | Grapefruit | 1L | 240 days | ARTE-GRF-1L |
+- **Arte** — Orange, Lime, Lemon, Grapefruit (1L bottles)
+- **Joosy** — Tropical, Mandarin, Blueberry, Apple (1L and 300ml)
+- **Quirks** — Blueberry, Sunshine, Apple, Tropical (250ml)
