@@ -63,8 +63,8 @@ export async function adjustStock(id, quantity, mode = 'bottle', description = '
 export async function scanInvoice(file) {
   const form = new FormData()
   form.append('file', file)
-  // Call Render backend directly to avoid Vercel's 30s proxy timeout
-  const SCAN_URL = import.meta.env.VITE_SCAN_URL || 'https://hpp-canada-inventory.onrender.com'
+  // Call Railway backend directly to avoid Vercel's 30s proxy timeout
+  const SCAN_URL = import.meta.env.VITE_SCAN_URL || 'https://hpp-canada-inventory-production.up.railway.app'
   const res = await fetch(`${SCAN_URL}/api/invoice/scan`, {
     method: 'POST',
     headers: { 'X-API-Key': API_KEY },
