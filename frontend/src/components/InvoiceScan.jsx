@@ -77,10 +77,18 @@ function ProductPicker({ labels, value, onChange, highlighted }) {
   )
 }
 
+const SCAN_STAGES = ['uploading', 'analyzing', 'extracting']
+const STAGE_LABELS = {
+  uploading: 'Uploading image',
+  analyzing: 'Analyzing invoice',
+  extracting: 'Extracting items',
+}
+
 export default function InvoiceScan({ labels, onConfirmed }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [scanning, setScanning] = useState(false)
+  const [scanStage, setScanStage] = useState(null)
   const [result, setResult] = useState(null)
   const [editItems, setEditItems] = useState([])
   const [confirming, setConfirming] = useState(false)
@@ -89,6 +97,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
   const [mode, setMode] = useState('add') // 'add' or 'remove'
   const fileRef = useRef()
   const cameraRef = useRef()
+  const stageTimersRef = useRef([])
 
   const handleFile = (f) => {
     if (!f) return
@@ -107,11 +116,24 @@ export default function InvoiceScan({ labels, onConfirmed }) {
     handleFile(e.dataTransfer.files?.[0])
   }
 
+  const clearStageTimers = () => {
+    stageTimersRef.current.forEach(clearTimeout)
+    stageTimersRef.current = []
+  }
+
   const handleScan = async () => {
     if (!file) return
     setScanning(true)
     setError('')
     setResult(null)
+
+    // Stage transitions: uploading → analyzing → extracting
+    setScanStage('uploading')
+    clearStageTimers()
+    stageTimersRef.current = [
+      setTimeout(() => setScanStage('analyzing'), 2000),
+      setTimeout(() => setScanStage('extracting'), 9000),
+    ]
 
     // Retry up to 3 times on failure
     let lastError = ''
@@ -119,6 +141,8 @@ export default function InvoiceScan({ labels, onConfirmed }) {
       try {
         const data = await scanInvoice(file)
         if (data.items && data.items.length > 0) {
+          clearStageTimers()
+          setScanStage('extracting')
           setResult(data)
           setEditItems(
             data.items.map((item, i) => ({
@@ -130,6 +154,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
           )
           setRetryCount(attempt)
           setScanning(false)
+          setScanStage(null)
           return
         }
         lastError = 'No items detected in invoice. Try a clearer photo.'
@@ -140,6 +165,8 @@ export default function InvoiceScan({ labels, onConfirmed }) {
       if (attempt < 2) await new Promise(r => setTimeout(r, 1000))
     }
 
+    clearStageTimers()
+    setScanStage(null)
     setError(lastError)
     setRetryCount(3)
     setScanning(false)
@@ -177,6 +204,8 @@ export default function InvoiceScan({ labels, onConfirmed }) {
   }
 
   const reset = () => {
+    clearStageTimers()
+    setScanStage(null)
     setFile(null)
     setPreview(null)
     setResult(null)
@@ -186,6 +215,8 @@ export default function InvoiceScan({ labels, onConfirmed }) {
   }
 
   const retakePhoto = () => {
+    clearStageTimers()
+    setScanStage(null)
     setFile(null)
     setPreview(null)
     setError('')
@@ -286,6 +317,35 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             )}
           </div>
 
+          {scanning && scanStage && (
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+              {SCAN_STAGES.map((stage, i) => {
+                const currentIdx = SCAN_STAGES.indexOf(scanStage)
+                const isDone = i < currentIdx
+                const isActive = i === currentIdx
+                return (
+                  <div key={stage} className={`flex items-center gap-3 px-4 py-3 ${i < SCAN_STAGES.length - 1 ? 'border-b border-stone-100' : ''}`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                      isDone ? 'bg-emerald-500' : isActive ? 'bg-orange-500' : 'bg-stone-100'
+                    }`}>
+                      {isDone
+                        ? <Check size={13} className="text-white" />
+                        : isActive
+                          ? <Loader2 size={13} className="text-white animate-spin" />
+                          : <div className="w-2 h-2 rounded-full bg-stone-300" />
+                      }
+                    </div>
+                    <span className={`text-sm font-medium transition-colors ${
+                      isDone ? 'text-emerald-600' : isActive ? 'text-stone-800' : 'text-stone-400'
+                    }`}>
+                      {STAGE_LABELS[stage]}{isActive ? '...' : ''}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           <button
             onClick={handleScan}
             disabled={scanning}
@@ -293,7 +353,7 @@ export default function InvoiceScan({ labels, onConfirmed }) {
             style={{ backgroundColor: ARTE_NAVY }}
           >
             {scanning ? (
-              <><Loader2 size={18} className="animate-spin" /> Reading document (auto-retries)...</>
+              <><Loader2 size={18} className="animate-spin" /> Reading document...</>
             ) : (
               <><FileText size={18} /> Scan Document</>
             )}

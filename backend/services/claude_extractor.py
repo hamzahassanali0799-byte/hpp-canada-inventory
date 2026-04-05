@@ -14,12 +14,12 @@ def compress_image(file_bytes: bytes) -> tuple[str, str]:
     img = Image.open(io.BytesIO(file_bytes))
     if img.mode != "RGB":
         img = img.convert("RGB")
-    # Resize to 1200px wide — fast upload, still readable
-    if img.width > 1200:
-        ratio = 1200 / img.width
-        img = img.resize((1200, int(img.height * ratio)), Image.LANCZOS)
+    # Resize to 900px wide — smaller payload, still readable for AI
+    if img.width > 900:
+        ratio = 900 / img.width
+        img = img.resize((900, int(img.height * ratio)), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85)
+    img.save(buf, format="JPEG", quality=72)
     return base64.standard_b64encode(buf.getvalue()).decode("utf-8"), "image/jpeg"
 
 
@@ -178,19 +178,11 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     item_hints = ", ".join(f"{l.item_code}={l.label_name}" for l in known[:80])
 
     prompt = (
-        'Read this document carefully. It could be an invoice, delivery note, packing slip, '
-        'handwritten note, spreadsheet screenshot, receipt, or any inventory-related document. '
-        'Extract every item/product you can find with quantities. '
-        'For each item give: no (item number/code if visible, e.g. FG-1516, RM-1042), '
-        'desc (full product description — include flavor, size, brand), '
-        'qty (quantity number — look for quantities, counts, amounts), '
-        'unit (Case/Bottle/Box/Each/KG/L/LB — whatever unit is shown), '
-        'price (unit price if visible, else 0), total (line total if visible, else 0). '
-        f'Known inventory items for matching: [{item_hints}]. '
-        'If you see items matching known codes, use those exact codes in the "no" field. '
-        'If info is missing (no qty, unclear item), still include the row with what you can read — '
-        'set qty to 0 and describe what you see in desc. '
-        'Return JSON: {"header":{"inv":"","company":"","date":""},"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
+        'Extract all items from this invoice/packing slip/delivery note. '
+        'For each line: no=item code (e.g. FG-1516), desc=product name with flavor/size/brand, '
+        'qty=quantity (0 if unclear), unit=Case/Bottle/Each/KG/L, price=unit price, total=line total. '
+        f'Known items: [{item_hints}]. Use exact codes when matched. '
+        'Return ONLY JSON: {"header":{"inv":"","company":"","date":""},"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
     )
 
     raw = None
@@ -210,6 +202,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                     json={
                         "model": "claude-haiku-4-5-20251001",
                         "max_tokens": 1024,
+                        "temperature": 0,
                         "messages": [{"role": "user", "content": [
                             {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
                             {"type": "text", "text": prompt},
