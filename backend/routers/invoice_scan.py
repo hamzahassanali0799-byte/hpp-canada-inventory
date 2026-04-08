@@ -39,6 +39,15 @@ async def scan_invoice(file: UploadFile = File(...), db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
 
+    # If the raw item number is purely numeric (a line number, not a product code),
+    # the extractor may have matched it falsely — clear those matches.
+    for item in result.get("items", []):
+        raw_no = item.get("raw_item_no", "")
+        if raw_no and str(raw_no).strip().isdigit():
+            item["matched_item_code"] = None
+            if "no_match" not in item.get("warnings", []):
+                item.setdefault("warnings", []).append("no_match")
+
     return result
 
 
