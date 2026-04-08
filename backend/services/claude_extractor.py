@@ -81,26 +81,31 @@ def match_product(desc: str, item_no: str) -> str | None:
 
 
 def match_product_db(desc: str, item_no: str, db_labels) -> str | None:
-    """Try to match against actual DB items."""
+    """Try to match against actual DB items. Only use item_no if it looks like a code (not a bare number)."""
     d = desc.lower()
     n = (item_no or "").strip().upper()
 
-    # Exact item code match
-    for label in db_labels:
-        if n and label.item_code.upper() == n:
-            return label.item_code
+    # Only use n for code matching if it has non-digit characters (it's a real code, not just "1" or "12")
+    n_is_code = bool(n) and not n.isdigit() and len(n) >= 4
 
-    # Partial item code match (e.g. "FG-1516" in item_no)
-    for label in db_labels:
-        if n and n in label.item_code.upper():
-            return label.item_code
+    if n_is_code:
+        # Exact item code match
+        for label in db_labels:
+            if label.item_code.upper() == n:
+                return label.item_code
 
-    # Keyword match against label_name / flavor
+        # Partial item code match — only safe when n is long enough to be unambiguous
+        if len(n) >= 5:
+            for label in db_labels:
+                if n in label.item_code.upper() or label.item_code.upper() in n:
+                    return label.item_code
+
+    # Keyword match against label_name — require >= 2 meaningful words (min 4 chars)
     best = None
     best_score = 0
     for label in db_labels:
         words = label.label_name.lower().split()
-        score = sum(1 for w in words if len(w) > 2 and w in d)
+        score = sum(1 for w in words if len(w) >= 4 and w in d)
         if score > best_score and score >= 2:
             best = label.item_code
             best_score = score
@@ -108,10 +113,22 @@ def match_product_db(desc: str, item_no: str, db_labels) -> str | None:
     return best
 
 
-def process(raw: dict, db_labels=None) -> dict:
+def _make_safe_code(no: str, desc: str) -> str | None:
+    """Generate a safe item_code from item no or description."""
+    if no and not no.strip().isdigit():
+        safe = re.sub(r'[^A-Za-z0-9\-]', '-', no).upper()
+        safe = re.sub(r'-+', '-', safe).strip('-')
+        return safe[:50] if safe else None
+    if desc:
+        words = re.sub(r'[^A-Za-z0-9 ]', '', desc).split()[:4]
+        safe = '-'.join(w[:5].upper() for w in words if w)
+        return safe[:50] if safe else None
+    return None
+
+
+def process(raw: dict, db_labels=None, db=None) -> dict:
     header = raw.get("header", {})
     items = []
-    missing_info = []
 
     for row in raw.get("rows", []):
         desc = str(row.get("desc", ""))
@@ -127,15 +144,38 @@ def process(raw: dict, db_labels=None) -> dict:
             if abs(calc - qty) > 1:
                 qty = calc
 
+        # Only use `no` for matching if it looks like an item code, not a plain number
+        no_for_match = no if (no and not no.strip().isdigit()) else ""
+
         # Try hardcoded match first, then DB match
-        matched = match_product(desc, no)
+        matched = match_product(desc, no_for_match)
         if not matched and db_labels:
-            matched = match_product_db(desc, no, db_labels)
+            matched = match_product_db(desc, no_for_match, db_labels)
+
+        # Auto-create product if still no match
+        if not matched and db is not None and (desc or no):
+            new_code = _make_safe_code(no_for_match, desc)
+            if new_code:
+                existing = db.query(Label).filter(Label.item_code == new_code).first()
+                if not existing:
+                    new_label = Label(
+                        label_name=desc[:100] or no,
+                        flavor="Unknown",
+                        item_code=new_code,
+                        color_identifier="",
+                        shelf_life_days=9999,
+                        notes="Auto-created by invoice scanner",
+                    )
+                    db.add(new_label)
+                    db.commit()
+                    db.refresh(new_label)
+                    if db_labels is not None:
+                        db_labels.append(new_label)
+                matched = new_code
 
         case_size = 6
         bottles = qty * case_size if "case" in unit.lower() else qty
 
-        # Track what's missing
         warnings = []
         if not matched:
             warnings.append("no_match")
@@ -249,4 +289,4 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     if not raw or not raw.get("rows"):
         raise ValueError("Could not read document. Make sure text is clear and readable.")
 
-    return process(raw, db_labels=known)
+    return process(raw, db_labels=known, db=db)
