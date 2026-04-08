@@ -34,19 +34,35 @@ async def scan_invoice(file: UploadFile = File(...), db: Session = Depends(get_d
     if len(file_bytes) > 20 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 20MB)")
 
+    # Snapshot item codes that exist BEFORE the scan so we can detect auto-created ones after
+    pre_scan_codes = {row[0] for row in db.query(Label.item_code).all()}
+
     try:
         result = await extract_invoice(file_bytes, file.content_type, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
 
-    # If the raw item number is purely numeric (a line number, not a product code),
-    # the extractor may have matched it falsely — clear those matches.
+    seen_new_codes: set[str] = set()
     for item in result.get("items", []):
         raw_no = item.get("raw_item_no", "")
+        # Clear matches for purely numeric raw numbers (they are line numbers, not product codes)
         if raw_no and str(raw_no).strip().isdigit():
             item["matched_item_code"] = None
             if "no_match" not in item.get("warnings", []):
                 item.setdefault("warnings", []).append("no_match")
+            continue
+
+        code = item.get("matched_item_code")
+        if code and code not in pre_scan_codes:
+            # This product didn't exist before the scan — it was auto-created
+            if code not in seen_new_codes:
+                seen_new_codes.add(code)
+            if "auto_created" not in item.get("warnings", []):
+                item.setdefault("warnings", []).append("auto_created")
+        elif code and code in seen_new_codes:
+            # Duplicate row for the same auto-created product on this invoice
+            if "auto_created" not in item.get("warnings", []):
+                item.setdefault("warnings", []).append("auto_created")
 
     return result
 

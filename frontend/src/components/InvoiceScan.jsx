@@ -60,7 +60,7 @@ function ProductPicker({ labels, value, onChange, highlighted, onCreateNew }) {
         }`}
       >
         <span className="truncate">
-          {selected ? `${selected.label_name} (${selected.item_code})` : '— select product —'}
+          {selected ? `${selected.label_name} (${selected.item_code})` : value ? value : '— select product —'}
         </span>
         <Search size={14} className="flex-shrink-0 ml-1 opacity-40" />
       </button>
@@ -209,6 +209,10 @@ export default function InvoiceScan({ labels, onConfirmed, onLabelsChanged }) {
           setRetryCount(attempt)
           setScanning(false)
           setScanStage(null)
+          // Refresh labels if any products were auto-created during this scan
+          if (data.items.some(item => item.warnings?.includes('auto_created'))) {
+            onLabelsChanged?.()
+          }
           return
         }
         lastError = 'No items detected in invoice. Try a clearer photo.'
