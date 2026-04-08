@@ -10,16 +10,16 @@ from backend.models.label import Label
 
 
 def compress_image(file_bytes: bytes) -> tuple[str, str]:
-    """Resize phone photo to reduce upload size. Keep it simple — no over-processing."""
+    """Resize phone photo to reduce upload size. No over-processing."""
     img = Image.open(io.BytesIO(file_bytes))
     if img.mode != "RGB":
         img = img.convert("RGB")
-    # Resize to 1400px wide — readable for AI text extraction
-    if img.width > 1400:
-        ratio = 1400 / img.width
-        img = img.resize((1400, int(img.height * ratio)), Image.LANCZOS)
+    # Resize to 900px wide — smaller payload, still readable for AI
+    if img.width > 900:
+        ratio = 900 / img.width
+        img = img.resize((900, int(img.height * ratio)), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=82)
+    img.save(buf, format="JPEG", quality=72)
     return base64.standard_b64encode(buf.getvalue()).decode("utf-8"), "image/jpeg"
 
 
@@ -52,17 +52,15 @@ KEYWORDS = {
 }
 
 
-def match_product(desc: str, supplier_code: str, item_no: str = "") -> str | None:
+def match_product(desc: str, item_no: str) -> str | None:
     d = desc.lower()
+    n = (item_no or "").lower().replace(" ", "-")
 
-    # Check FG codes in supplier code and item_no
-    for candidate in [supplier_code, item_no]:
-        n = (candidate or "").lower().replace(" ", "-")
-        fg = re.search(r'fg[- ]?(\d+)', n)
-        if fg:
-            key = f"fg-{fg.group(1)}"
-            if key in FG_CODES:
-                return FG_CODES[key]
+    fg = re.search(r'fg[- ]?(\d+)', n)
+    if fg:
+        key = f"fg-{fg.group(1)}"
+        if key in FG_CODES:
+            return FG_CODES[key]
 
     best = None
     best_s = 0
@@ -82,25 +80,23 @@ def match_product(desc: str, supplier_code: str, item_no: str = "") -> str | Non
     return None
 
 
-def match_product_db(desc: str, supplier_code: str, db_labels) -> str | None:
-    """Try to match against actual DB items using supplier code first, then description."""
+def match_product_db(desc: str, item_no: str, db_labels) -> str | None:
+    """Try to match against actual DB items."""
     d = desc.lower()
-    sc = (supplier_code or "").strip().upper()
+    n = (item_no or "").strip().upper()
 
-    # 1. Exact match: supplier code == item_code
+    # Exact item code match
     for label in db_labels:
-        if sc and label.item_code.upper() == sc:
+        if n and label.item_code.upper() == n:
             return label.item_code
 
-    # 2. Partial match — only if supplier code is >= 5 chars to avoid false positives
-    #    (e.g., avoid "1" matching "ARTE-LME-1L-BTL")
-    if len(sc) >= 5:
+    # Partial item code match — only if code is >= 4 chars to avoid "1" matching everything
+    if len(n) >= 4:
         for label in db_labels:
-            if sc in label.item_code.upper() or label.item_code.upper() in sc:
+            if n in label.item_code.upper() or label.item_code.upper() in n:
                 return label.item_code
 
-    # 3. Keyword match against label_name — require >= 2 meaningful words (min 4 chars
-    #    to filter out short tokens like "1l", "art", "the" causing false matches)
+    # Keyword match against label_name — require >= 2 words of 4+ chars to avoid false matches
     best = None
     best_score = 0
     for label in db_labels:
@@ -136,34 +132,36 @@ def process(raw: dict, db_labels=None, db=None, supplier_name: str = "") -> dict
         desc = str(row.get("desc", ""))
         no = str(row.get("no", ""))
 
-        # 'no' can be either a line number (purely numeric) or the actual item code
-        # (e.g. AS-32-36/IO, FG-1516). Treat purely-numeric values as line numbers
-        # and don't use them for product matching — prevents "1" matching every code.
-        supplier_code = no if no and not no.strip().isdigit() else ""
+        # 'no' is either a line number (purely numeric) or an actual item code.
+        # Treat purely-numeric values as line numbers — don't use them for product matching.
+        item_code = no if no and not no.strip().isdigit() else ""
 
         qty = int(row.get("qty", 0) or 0)
         unit = str(row.get("unit", ""))
         price = float(row.get("price", 0) or 0)
         total = float(row.get("total", 0) or 0)
 
-        # Math validation: if price×qty doesn't match total, recalculate
+        # Math validation
         if price > 0 and total > 0:
             calc = round(total / price)
             if abs(calc - qty) > 1:
                 qty = calc
 
-        # Try hardcoded match first (FG codes / brand keywords), then DB match
-        matched = match_product(desc, supplier_code, "")
+        # Try hardcoded match first, then DB match
+        matched = match_product(desc, item_code)
         if not matched and db_labels:
-            matched = match_product_db(desc, supplier_code, db_labels)
+            matched = match_product_db(desc, item_code, db_labels)
 
+        case_size = 6
+        bottles = qty * case_size if "case" in unit.lower() else qty
+
+        # Track what's missing
         warnings = []
 
-        # Auto-create product if no match found and we have a real item code (not a line number)
-        if not matched and supplier_code and db is not None:
-            safe_code = _make_safe_code(supplier_code, desc)
+        # Auto-create product if no match and we have a real item code
+        if not matched and item_code and db is not None:
+            safe_code = _make_safe_code(item_code, desc)
             if safe_code:
-                # Check if already exists in our local list (avoids duplicates within one scan)
                 existing = next((l for l in db_labels if l.item_code.upper() == safe_code.upper()), None)
                 if existing:
                     matched = existing.item_code
@@ -172,7 +170,7 @@ def process(raw: dict, db_labels=None, db=None, supplier_name: str = "") -> dict
                         new_label = Label(
                             brand=supplier or "Unknown",
                             category="bottle",
-                            label_name=desc or supplier_code,
+                            label_name=desc or item_code,
                             item_code=safe_code,
                             flavor="",
                             size="",
@@ -199,29 +197,19 @@ def process(raw: dict, db_labels=None, db=None, supplier_name: str = "") -> dict
         elif not matched:
             warnings.append("no_match")
 
-        case_size = 6
-        bottles = qty * case_size if "case" in unit.lower() else qty
-
         if qty == 0:
             warnings.append("no_qty")
         if not desc or desc.lower() in ("", "nan"):
             warnings.append("no_desc")
 
-        # Build display description — show supplier code in brackets if present
-        if supplier_code:
-            display_desc = f"{desc} [{supplier_code}]" if desc else supplier_code
-        else:
-            display_desc = desc
-
         items.append({
-            "description": display_desc,
+            "description": f"{desc} [{item_code}]" if item_code else desc,
             "quantity_bottles": bottles,
             "quantity_cases": qty if "case" in unit.lower() else None,
             "unit_price": price if price > 0 else None,
             "matched_item_code": matched,
             "warnings": warnings,
             "raw_item_no": no,
-            "raw_supplier_code": supplier_code,
             "raw_unit": unit,
         })
 
@@ -248,21 +236,11 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     item_hints = ", ".join(f"{l.item_code}={l.label_name}" for l in known[:80])
 
     prompt = (
-        'Read this invoice/packing slip/delivery note EXACTLY as printed. '
-        'Do NOT paraphrase, interpret, or correct any text. Copy every word and number character-for-character.\n\n'
-        'CRITICAL RULES:\n'
-        '- Item codes (e.g. FG-1516, FG-1515, AS-32-36/IO, AS-36-C/old/White/Cap) must be copied EXACTLY. Never substitute digits.\n'
-        '- Product descriptions must be copied verbatim from the document.\n'
-        '- Quantities: read the EXACT number printed. Never default to 0 if a number is visible.\n'
-        '- Each row in the document = one row in output. Do NOT merge or duplicate rows.\n'
-        '- Skip rows that are purely subtotals, column headers, or blank with no product description.\n'
-        '- The "desc" field must always contain a product description (words), NEVER just a standalone number.\n\n'
-        'For each line item extract: no=item code or line number as printed, desc=full product description as printed, '
-        'qty=quantity number, unit=Case/Bottle/Each/KG/L, price=unit price, total=line total.\n\n'
-        f'Known inventory items for reference (use for matching only, always prefer document text): [{item_hints}]\n\n'
-        'Return ONLY valid JSON:\n'
-        '{"header":{"inv":"invoice number","company":"company name","date":"date"},'
-        '"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
+        'Extract all items from this invoice/packing slip/delivery note. '
+        'For each line: no=item code (e.g. FG-1516), desc=product name with flavor/size/brand, '
+        'qty=quantity (0 if unclear), unit=Case/Bottle/Each/KG/L, price=unit price, total=line total. '
+        f'Known items: [{item_hints}]. Use exact codes when matched. '
+        'Return ONLY JSON: {"header":{"inv":"","company":"","date":""},"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
     )
 
     raw = None
@@ -281,7 +259,7 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
                     },
                     json={
                         "model": "claude-haiku-4-5-20251001",
-                        "max_tokens": 2048,
+                        "max_tokens": 1024,
                         "temperature": 0,
                         "messages": [{"role": "user", "content": [
                             {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
@@ -321,4 +299,4 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
     if not raw or not raw.get("rows"):
         raise ValueError("Could not read document. Make sure text is clear and readable.")
 
-    return process(raw, db_labels=known, db=db, supplier_name="")
+    return process(raw, db_labels=known, db=db)
