@@ -580,7 +580,7 @@ export default function InvoiceScan({ labels, onConfirmed, onLabelsChanged }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="grid gap-3 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(85px, 1fr))' }}>
                   <div>
                     <label className={`block text-[10px] font-bold uppercase tracking-widest mb-1 ${
                       warnings.includes('no_qty') ? 'text-red-500' : 'text-stone-400'

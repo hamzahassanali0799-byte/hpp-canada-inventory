@@ -9,6 +9,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #1c1917;
+  /* Prevent Android from inheriting or computing a rotated writing mode */
+  writing-mode: horizontal-tb;
+  overflow-x: hidden;
 }
 
 ::-webkit-scrollbar {
@@ -31,8 +34,8 @@ body {
   display: none;
 }
 
-/* Prevent double-tap zoom on mobile */
-* {
+/* Prevent double-tap zoom on mobile — only on interactive elements, not * (breaks Android layout) */
+button, a, input, select, textarea, label, [role="button"] {
   touch-action: manipulation;
 }
 
@@ -54,9 +57,14 @@ body {
   animation: fade-in 0.2s ease-out;
 }
 
-/* Smooth page transitions */
+/* Smooth page transitions — opacity only, no transform (transform on flex+overflow-auto triggers Android compositing rotation bug) */
 main {
-  animation: fade-in 0.15s ease-out;
+  animation: fade-in-page 0.15s ease-out;
+}
+
+@keyframes fade-in-page {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Smooth number transitions */
@@ -69,7 +77,7 @@ button:active:not(:disabled) {
   transform: scale(0.97);
 }
 
-/* Smooth scrolling everywhere */
-* {
+/* Smooth scrolling — html only, not * (applying to all elements breaks Android scroll containers) */
+html {
   scroll-behavior: smooth;
 }
