@@ -135,7 +135,12 @@ def process(raw: dict, db_labels=None, db=None, supplier_name: str = "") -> dict
     for row in raw.get("rows", []):
         desc = str(row.get("desc", ""))
         no = str(row.get("no", ""))
-        supplier_code = str(row.get("code", ""))  # supplier item code, e.g. AS-32-36/IO
+
+        # 'no' can be either a line number (purely numeric) or the actual item code
+        # (e.g. AS-32-36/IO, FG-1516). Treat purely-numeric values as line numbers
+        # and don't use them for product matching — prevents "1" matching every code.
+        supplier_code = no if no and not no.strip().isdigit() else ""
+
         qty = int(row.get("qty", 0) or 0)
         unit = str(row.get("unit", ""))
         price = float(row.get("price", 0) or 0)
@@ -148,14 +153,14 @@ def process(raw: dict, db_labels=None, db=None, supplier_name: str = "") -> dict
                 qty = calc
 
         # Try hardcoded match first (FG codes / brand keywords), then DB match
-        matched = match_product(desc, supplier_code, no)
+        matched = match_product(desc, supplier_code, "")
         if not matched and db_labels:
             matched = match_product_db(desc, supplier_code, db_labels)
 
         warnings = []
 
-        # Auto-create product if no match found and we have identifying info
-        if not matched and (supplier_code or desc) and db is not None:
+        # Auto-create product if no match found and we have a real item code (not a line number)
+        if not matched and supplier_code and db is not None:
             safe_code = _make_safe_code(supplier_code, desc)
             if safe_code:
                 # Check if already exists in our local list (avoids duplicates within one scan)
@@ -205,8 +210,6 @@ def process(raw: dict, db_labels=None, db=None, supplier_name: str = "") -> dict
         # Build display description — show supplier code in brackets if present
         if supplier_code:
             display_desc = f"{desc} [{supplier_code}]" if desc else supplier_code
-        elif no and no not in ("0", ""):
-            display_desc = f"{desc} [{no}]" if desc else no
         else:
             display_desc = desc
 
@@ -248,21 +251,18 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
         'Read this invoice/packing slip/delivery note EXACTLY as printed. '
         'Do NOT paraphrase, interpret, or correct any text. Copy every word and number character-for-character.\n\n'
         'CRITICAL RULES:\n'
-        '- Item/product codes (e.g. FG-1516, AS-32-36/IO, AS-36-C/old/White/Cap) must be copied EXACTLY — never substitute digits or letters.\n'
+        '- Item codes (e.g. FG-1516, FG-1515, AS-32-36/IO, AS-36-C/old/White/Cap) must be copied EXACTLY. Never substitute digits.\n'
         '- Product descriptions must be copied verbatim from the document.\n'
         '- Quantities: read the EXACT number printed. Never default to 0 if a number is visible.\n'
         '- Each row in the document = one row in output. Do NOT merge or duplicate rows.\n'
         '- Skip rows that are purely subtotals, column headers, or blank with no product description.\n'
-        '- The "desc" field must always contain a product description (words), NEVER just a number.\n\n'
-        'For each line item extract: '
-        'no=line number, '
-        'code=supplier item/product code with dashes/slashes (e.g. AS-32-36/IO or FG-1516) — empty string if not visible, '
-        'desc=full product description as printed, '
+        '- The "desc" field must always contain a product description (words), NEVER just a standalone number.\n\n'
+        'For each line item extract: no=item code or line number as printed, desc=full product description as printed, '
         'qty=quantity number, unit=Case/Bottle/Each/KG/L, price=unit price, total=line total.\n\n'
-        f'Known inventory items for reference (always prefer document text): [{item_hints}]\n\n'
+        f'Known inventory items for reference (use for matching only, always prefer document text): [{item_hints}]\n\n'
         'Return ONLY valid JSON:\n'
         '{"header":{"inv":"invoice number","company":"company name","date":"date"},'
-        '"rows":[{"no":"","code":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
+        '"rows":[{"no":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
     )
 
     raw = None
