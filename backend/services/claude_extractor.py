@@ -4,43 +4,22 @@ import io
 import os
 import re
 import httpx
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image
 from sqlalchemy.orm import Session
 from backend.models.label import Label
 
 
 def compress_image(file_bytes: bytes) -> tuple[str, str]:
-    """Resize and enhance phone photo for better AI text extraction.
-    Handles low-res and blurry phone camera images."""
+    """Resize phone photo to reduce upload size. Keep it simple — no over-processing."""
     img = Image.open(io.BytesIO(file_bytes))
     if img.mode != "RGB":
         img = img.convert("RGB")
-
-    is_small = img.width < 900
-
-    if is_small:
-        # Upscale small/low-res images to improve OCR
-        target_width = 1200
-        ratio = target_width / img.width
-        img = img.resize((target_width, int(img.height * ratio)), Image.LANCZOS)
-        # Auto-contrast to improve text readability on low-quality cameras
-        img = ImageOps.autocontrast(img, cutoff=1)
-        # Sharpen text edges for blurry images
-        enhancer = ImageEnhance.Sharpness(img)
-        img = enhancer.enhance(1.8)
-        quality = 88
-    elif img.width > 1400:
-        # Resize large images down
+    # Resize to 1400px wide — readable for AI text extraction
+    if img.width > 1400:
         ratio = 1400 / img.width
         img = img.resize((1400, int(img.height * ratio)), Image.LANCZOS)
-        quality = 82
-    else:
-        # Medium-size images: mild auto-contrast enhancement
-        img = ImageOps.autocontrast(img, cutoff=1)
-        quality = 85
-
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=quality)
+    img.save(buf, format="JPEG", quality=82)
     return base64.standard_b64encode(buf.getvalue()).decode("utf-8"), "image/jpeg"
 
 
@@ -267,26 +246,20 @@ async def extract_invoice(file_bytes: bytes, content_type: str, db: Session) -> 
 
     prompt = (
         'Read this invoice/packing slip/delivery note EXACTLY as printed. '
-        'NOTE: The image may be low quality, blurry, or taken with a low-resolution phone camera — '
-        'try your best to read text even if it is blurry or partially obscured.\n\n'
         'Do NOT paraphrase, interpret, or correct any text. Copy every word and number character-for-character.\n\n'
         'CRITICAL RULES:\n'
-        '- The "code" field must contain the supplier/product code printed on the document '
-        '(e.g. AS-32-36/IO, AS-36-C/old/White/Cap, FG-1516). These are alphanumeric codes '
-        'with dashes or slashes — NOT row numbers.\n'
-        '- The "no" field is for the row/line number only (1, 2, 3...).\n'
+        '- Item/product codes (e.g. FG-1516, AS-32-36/IO, AS-36-C/old/White/Cap) must be copied EXACTLY — never substitute digits or letters.\n'
         '- Product descriptions must be copied verbatim from the document.\n'
         '- Quantities: read the EXACT number printed. Never default to 0 if a number is visible.\n'
-        '- Each row in the document = one row in output. Do NOT merge or duplicate rows.\n\n'
-        'For each line item extract:\n'
-        '  no = row/line number as printed\n'
-        '  code = supplier item/product code (alphanumeric with dashes/slashes, e.g. AS-32-36/IO)\n'
-        '  desc = full product description as printed\n'
-        '  qty = quantity number only\n'
-        '  unit = Case/Bottle/Each/KG/L\n'
-        '  price = unit price\n'
-        '  total = line total\n\n'
-        f'Known inventory items (for reference only): [{item_hints}]\n\n'
+        '- Each row in the document = one row in output. Do NOT merge or duplicate rows.\n'
+        '- Skip rows that are purely subtotals, column headers, or blank with no product description.\n'
+        '- The "desc" field must always contain a product description (words), NEVER just a number.\n\n'
+        'For each line item extract: '
+        'no=line number, '
+        'code=supplier item/product code with dashes/slashes (e.g. AS-32-36/IO or FG-1516) — empty string if not visible, '
+        'desc=full product description as printed, '
+        'qty=quantity number, unit=Case/Bottle/Each/KG/L, price=unit price, total=line total.\n\n'
+        f'Known inventory items for reference (always prefer document text): [{item_hints}]\n\n'
         'Return ONLY valid JSON:\n'
         '{"header":{"inv":"invoice number","company":"company name","date":"date"},'
         '"rows":[{"no":"","code":"","desc":"","qty":0,"unit":"","price":0,"total":0}]}'
