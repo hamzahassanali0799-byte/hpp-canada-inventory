@@ -550,9 +550,12 @@ export default function InvoiceScan({ labels, onConfirmed, onLabelsChanged }) {
                   <div className="flex-1">
                     <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Description</label>
                     <p className="text-sm font-medium text-stone-800">{item.description}</p>
+                    {item.raw_supplier_code && (
+                      <p className="text-[10px] text-stone-400 font-mono mt-0.5">Code: {item.raw_supplier_code}</p>
+                    )}
                     {/* Warning badges */}
-                    {hasWarning && item._enabled && (
-                      <div className="flex gap-1.5 mt-1.5">
+                    {(hasWarning || warnings.includes('auto_created')) && item._enabled && (
+                      <div className="flex gap-1.5 mt-1.5 flex-wrap">
                         {warnings.includes('no_match') && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold flex items-center gap-0.5">
                             <AlertTriangle size={9} /> Select product below
@@ -561,6 +564,11 @@ export default function InvoiceScan({ labels, onConfirmed, onLabelsChanged }) {
                         {warnings.includes('no_qty') && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-bold flex items-center gap-0.5">
                             <AlertTriangle size={9} /> Enter quantity
+                          </span>
+                        )}
+                        {warnings.includes('auto_created') && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold flex items-center gap-0.5">
+                            <Plus size={9} /> New product created
                           </span>
                         )}
                       </div>
