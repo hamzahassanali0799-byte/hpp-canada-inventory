@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>XAUUSD trade checker</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 1rem 1.25rem 2rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0b0d10; color: #e7e9ec;
+  }
+  h1 { font-size: 1.15rem; margin: .25rem 0 .5rem; font-weight: 600; }
+  .sub { color: #8a93a0; font-size: .85rem; margin-bottom: 1rem; }
+  .grid { display: grid; gap: 1rem; grid-template-columns: minmax(280px, 360px) 1fr; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: #11151a; border: 1px solid #1f262d; border-radius: 10px; padding: .9rem; }
+  textarea {
+    width: 100%; min-height: 170px; resize: vertical;
+    background: #0d1116; color: #e7e9ec; border: 1px solid #1f262d;
+    border-radius: 8px; padding: .65rem; font: .85rem ui-monospace, Menlo, monospace;
+  }
+  label { display: block; font-size: .78rem; color: #8a93a0; margin: .7rem 0 .25rem; }
+  input[type=number], input[type=file] {
+    width: 100%; background: #0d1116; color: #e7e9ec;
+    border: 1px solid #1f262d; border-radius: 6px; padding: .45rem; font-size: .85rem;
+  }
+  button {
+    background: #2563eb; color: white; border: 0; border-radius: 6px;
+    padding: .55rem 1rem; font-size: .9rem; font-weight: 600; cursor: pointer; margin-top: .9rem;
+  }
+  button:disabled { opacity: .55; cursor: wait; }
+  #chart { width: 100%; height: 540px; }
+  .verdict {
+    display: inline-block; font-size: 1rem; font-weight: 700; letter-spacing: .03em;
+    padding: .35rem .75rem; border-radius: 999px; margin-bottom: .5rem;
+  }
+  .v-sl_hit { background: #3a1014; color: #ff6c6c; border: 1px solid #6a1d24; }
+  .v-tp1_only, .v-tp2_hit { background: #0e2a1f; color: #5eead4; border: 1px solid #155245; }
+  .v-open { background: #0f1d36; color: #93c5fd; border: 1px solid #1d3a6b; }
+  .v-ambiguous { background: #2a1f0f; color: #fbbf24; border: 1px solid #6b4d1d; }
+  .v-no_data { background: #1c1f24; color: #aaa; border: 1px solid #333; }
+  .meta { font-size: .82rem; color: #8a93a0; line-height: 1.5; }
+  .meta b { color: #d8dee5; font-weight: 600; }
+  .err { color: #ff8585; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: .82rem; }
+  details summary { cursor: pointer; color: #8a93a0; font-size: .8rem; margin-top: .5rem; }
+  details pre { background: #0d1116; padding: .6rem; border-radius: 6px; overflow-x: auto; font-size: .72rem; max-height: 280px; }
+</style>
+</head>
+<body>
+
+<h1>XAUUSD trade outcome checker</h1>
+<p class="sub">Paste a trade + drop your PuPrime MT4/MT5 1m CSV. Everything runs in this page — no server.</p>
+
+<div class="grid">
+  <div class="panel">
+    <form id="form">
+      <label>Trade paste (either format)</label>
+      <textarea name="text" placeholder="#16 — 11:20 SELL — LOSS
+Entry $4721.31 | SL $4728.68 | TP1 $4710 | TP2 $4692
+Lots: 0.03/leg
+
+— or —
+
+#16 — Wed Apr 23, 1:20 AM PST (broker 11:20) — SL/SL -$44
+XAUUSD SELL 4721.31
+TP 1 : 4710
+TP 2 : 4692
+SL : 4728.38"></textarea>
+
+      <label>PuPrime MT4/MT5 1m CSV (XAUUSD)</label>
+      <input type="file" name="csv_file" accept=".csv,.txt" />
+
+      <label>Broker UTC offset (hours) — PuPrime is +3 in summer, +2 in winter</label>
+      <input type="number" name="broker_offset" value="3" step="0.5" min="-12" max="14" />
+
+      <label>If paste has no date — assume this date (YYYY-MM-DD, blank = today)</label>
+      <input type="text" name="fallback_date" placeholder="" />
+
+      <button type="submit" id="submit">Check</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div id="status" class="meta">Awaiting input.</div>
+    <div id="chart"></div>
+    <details><summary>raw parsed data</summary><pre id="raw"></pre></details>
+  </div>
+</div>
+
+<script>
+// ---------- parser ----------
+function parseTrade(text, defaultOffset, fallbackDate) {
+  const t = text.trim();
+  const sideM = t.match(/\b(SELL|BUY)\b/i);
+  if (!sideM) throw new Error("couldn't find SELL/BUY");
+  const side = sideM[1].toUpperCase();
+
+  let entry;
+  const fmtB = t.match(/XAU(?:USD)?\s+(?:SELL|BUY)\s+([\d.]+)/i);
+  if (fmtB) {
+    entry = parseFloat(fmtB[1]);
+  } else {
+    const m = t.match(/Entry\s*\$?\s*([\d.]+)/i);
+    if (!m) throw new Error("couldn't find entry price");
+    entry = parseFloat(m[1]);
+  }
+
+  const num = (re) => { const m = t.match(re); return m ? parseFloat(m[1]) : null; };
+  const tp1 = num(/TP\s*1\b\s*:?\s*\$?\s*([\d.]+)/i);
+  const tp2 = num(/TP\s*2\b\s*:?\s*\$?\s*([\d.]+)/i);
+
+  // SL: skip "SL/SL" header tag — find an SL followed by a numeric value.
+  let sl = null;
+  const slRe = /\bSL\b\s*:?\s*\$?\s*([\d.]+)/gi;
+  let m;
+  while ((m = slRe.exec(t)) !== null) { sl = parseFloat(m[1]); break; }
+  if (tp1 == null || sl == null) throw new Error("couldn't find TP1 and/or SL");
+
+  const numM = t.match(/#\s*(\d+)/);
+  const number = numM ? parseInt(numM[1], 10) : null;
+
+  // broker time
+  let bt = null;
+  const m1 = t.match(/broker\s*(\d{1,2}:\d{2})/i);
+  if (m1) bt = m1[1];
+  else {
+    const m2 = t.match(/(\d{1,2}:\d{2})\s*(?:AM|PM)?\s*(?:—|-|–)\s*(?:SELL|BUY)/i);
+    if (m2) bt = m2[1];
+    else {
+      const m3 = t.match(/—\s*(\d{1,2}:\d{2})\b/);
+      if (m3) bt = m3[1];
+    }
+  }
+
+  // broker date (e.g. "Wed Apr 23") — pick the year whose Apr 23 is a Wed.
+  let bd = null;
+  const dm = t.match(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\b/i);
+  if (dm) {
+    const wk = dm[1].slice(0,3).toLowerCase();
+    const monIdx = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(dm[2].slice(0,3).toLowerCase());
+    const day = parseInt(dm[3], 10);
+    const nowY = new Date().getUTCFullYear();
+    for (const y of [nowY, nowY-1, nowY+1, nowY-2]) {
+      const d = new Date(Date.UTC(y, monIdx, day));
+      const w = ["sun","mon","tue","wed","thu","fri","sat"][d.getUTCDay()];
+      if (w === wk) { bd = `${y}-${String(monIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; break; }
+    }
+  }
+  if (!bd && fallbackDate) bd = fallbackDate;
+  if (!bd) {
+    const today = new Date();
+    bd = `${today.getUTCFullYear()}-${String(today.getUTCMonth()+1).padStart(2,'0')}-${String(today.getUTCDate()).padStart(2,'0')}`;
+  }
+
+  let declared = null;
+  for (const tag of ["TP/TP","SL/SL","TP/SL","SL/TP","LOSS","WIN"]) {
+    if (t.toUpperCase().includes(tag)) { declared = tag; break; }
+  }
+
+  return { number, side, entry, sl, tp1, tp2, broker_time: bt, broker_date: bd, broker_offset_hours: defaultOffset, declared_result: declared };
+}
+
+// ---------- broker time → UTC seconds ----------
+function brokerToUtcSeconds(dateStr, timeStr, offsetHours) {
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const [h,mi] = timeStr.split(':').map(Number);
+  const ms = Date.UTC(y, m-1, d, h, mi) - offsetHours * 3600 * 1000;
+  return Math.floor(ms / 1000);
+}
+
+// ---------- CSV parser (MT4 / MT5) ----------
+function parseCsv(content, offsetHours) {
+  const text = content.replace(/^﻿/, '').trim();
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+  if (!lines.length) throw new Error("empty CSV");
+
+  const sniff = (line) => line.includes('\t') ? '\t' : (line.includes(';') ? ';' : ',');
+  const sep = sniff(lines[0]);
+
+  // MT4 history exports often have NO header; columns: date,time,open,high,low,close,volume
+  const cells0 = lines[0].split(sep).map(c => c.trim().replace(/^[<"]+|[>"]+$/g, ''));
+  const looksLikeNumbers = cells0.length >= 6 && /^\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2}/.test(cells0[0]) && /^\d{1,2}:\d{2}/.test(cells0[1]);
+
+  let header, dataLines;
+  if (looksLikeNumbers) {
+    header = ["date","time","open","high","low","close","volume","spread","tickvol"].slice(0, cells0.length);
+    dataLines = lines;
+  } else {
+    header = cells0.map(c => c.toLowerCase());
+    dataLines = lines.slice(1);
+  }
+
+  const idx = (name) => header.indexOf(name);
+  const dateI = idx("date"), timeI = idx("time"), dtI = idx("datetime"), tsI = idx("timestamp");
+  const oI = idx("open"), hI = idx("high"), lI = idx("low"), cI = idx("close");
+  if (oI < 0 || hI < 0 || lI < 0 || cI < 0)
+    throw new Error("CSV missing OHLC columns. Header was: " + header.join(", "));
+
+  const bars = [];
+  for (const line of dataLines) {
+    const row = line.split(sep);
+    if (row.length < 4) continue;
+    let secs;
+    if (dateI >= 0 && timeI >= 0) {
+      const ds = row[dateI].trim().replace(/[.\/]/g, "-");
+      const ts = row[timeI].trim();
+      const [y,m,d] = ds.split("-").map(Number);
+      const [h,mi,s] = ts.split(":").map(v => parseInt(v,10) || 0);
+      const ms = Date.UTC(y, m-1, d, h, mi, s||0) - offsetHours * 3600 * 1000;
+      secs = Math.floor(ms / 1000);
+    } else if (dtI >= 0 || tsI >= 0) {
+      const v = row[dtI >= 0 ? dtI : tsI].trim().replace(/[.\/]/g, "-");
+      // Treat as broker-local. Force UTC parse, then subtract offset.
+      const isoLike = v.includes("T") ? v : v.replace(" ", "T");
+      const localMs = Date.parse(isoLike + "Z");  // pretend it's UTC, then offset-adjust below
+      if (isNaN(localMs)) continue;
+      secs = Math.floor((localMs - offsetHours * 3600 * 1000) / 1000);
+    } else continue;
+
+    bars.push({
+      time: secs,
+      open: parseFloat(row[oI]),
+      high: parseFloat(row[hI]),
+      low: parseFloat(row[lI]),
+      close: parseFloat(row[cI]),
+    });
+  }
+  bars.sort((a,b) => a.time - b.time);
+  return bars;
+}
+
+// ---------- outcome walker ----------
+function walk(trade, bars, entrySecs) {
+  const after = bars.filter(b => b.time >= entrySecs);
+  if (!after.length) return { status: "no_data", message: `no bars at or after entry ${new Date(entrySecs*1000).toISOString()}` };
+
+  const isShort = trade.side === "SELL";
+  let tp1Done = false, tp1Event = null;
+
+  for (const b of after) {
+    let slHit, tp1Hit, tp2Hit;
+    if (isShort) {
+      slHit = b.high >= trade.sl;
+      tp1Hit = !tp1Done && b.low <= trade.tp1;
+      tp2Hit = trade.tp2 != null && b.low <= trade.tp2;
+    } else {
+      slHit = b.low <= trade.sl;
+      tp1Hit = !tp1Done && b.high >= trade.tp1;
+      tp2Hit = trade.tp2 != null && b.high >= trade.tp2;
+    }
+    if (slHit && (tp1Hit || tp2Hit))
+      return { status: "ambiguous", message: "SL and TP both fell inside the same 1m bar — need tick data to resolve", ts_unix: b.time, tp1_event: tp1Event };
+    if (slHit) return { status: "sl_hit", message: `SL hit at ${new Date(b.time*1000).toISOString()}`, level: trade.sl, ts_unix: b.time, tp1_event: tp1Event };
+    if (tp2Hit) return { status: "tp2_hit", message: `TP2 hit at ${new Date(b.time*1000).toISOString()}`, level: trade.tp2, ts_unix: b.time, tp1_event: tp1Event };
+    if (tp1Hit) { tp1Done = true; tp1Event = { ts_unix: b.time, level: trade.tp1 }; }
+  }
+  if (tp1Event) return { status: "tp1_only", message: "TP1 hit, neither TP2 nor SL reached in the data window", tp1_event: tp1Event, last_bar_unix: after[after.length-1].time };
+  return { status: "open", message: "neither SL nor any TP hit in the data window", last_bar_unix: after[after.length-1].time, last_close: after[after.length-1].close };
+}
+
+// ---------- chart rendering ----------
+const chartEl = document.getElementById('chart');
+const statusEl = document.getElementById('status');
+const rawEl = document.getElementById('raw');
+const submit = document.getElementById('submit');
+let chart, candles, slZone, tpZone, priceLines = [];
+
+function ensureChart() {
+  if (chart) return;
+  chart = LightweightCharts.createChart(chartEl, {
+    layout: { background: { color: '#0b0d10' }, textColor: '#cbd2db' },
+    grid: { vertLines: { color: '#161b22' }, horzLines: { color: '#161b22' } },
+    rightPriceScale: { borderColor: '#1f262d' },
+    timeScale: { borderColor: '#1f262d', timeVisible: true, secondsVisible: false },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    width: chartEl.clientWidth,
+    height: 540,
+  });
+  candles = chart.addCandlestickSeries({
+    upColor: '#26a69a', downColor: '#ef5350',
+    borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+    wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+    priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+  });
+  window.addEventListener('resize', () => chart.applyOptions({ width: chartEl.clientWidth }));
+}
+
+function clearOverlays() {
+  if (slZone) { chart.removeSeries(slZone); slZone = null; }
+  if (tpZone) { chart.removeSeries(tpZone); tpZone = null; }
+  for (const pl of priceLines) candles.removePriceLine(pl);
+  priceLines = [];
+  candles.setMarkers([]);
+}
+
+function drawZones(trade, bars) {
+  const tpEnd = trade.tp2 ?? trade.tp1;
+  tpZone = chart.addHistogramSeries({ base: trade.entry, color: 'rgba(38,166,154,0.18)', priceLineVisible: false, lastValueVisible: false });
+  tpZone.setData(bars.map(b => ({ time: b.time, value: tpEnd })));
+  slZone = chart.addHistogramSeries({ base: trade.entry, color: 'rgba(239,83,80,0.22)', priceLineVisible: false, lastValueVisible: false });
+  slZone.setData(bars.map(b => ({ time: b.time, value: trade.sl })));
+}
+
+function drawLevels(trade) {
+  priceLines.push(candles.createPriceLine({ price: trade.entry, color: '#e7e9ec', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: 'Entry ' + trade.entry }));
+  priceLines.push(candles.createPriceLine({ price: trade.sl, color: '#ef5350', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'SL ' + trade.sl }));
+  priceLines.push(candles.createPriceLine({ price: trade.tp1, color: '#26a69a', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'TP1 ' + trade.tp1 }));
+  if (trade.tp2 != null) priceLines.push(candles.createPriceLine({ price: trade.tp2, color: '#26a69a', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'TP2 ' + trade.tp2 }));
+}
+
+function drawMarkers(trade, entrySecs, result) {
+  const markers = [{
+    time: entrySecs,
+    position: trade.side === 'SELL' ? 'aboveBar' : 'belowBar',
+    color: '#e7e9ec',
+    shape: trade.side === 'SELL' ? 'arrowDown' : 'arrowUp',
+    text: `${trade.side}${trade.number ? ' #' + trade.number : ''} @ ${trade.entry}`,
+  }];
+  if (result.tp1_event) markers.push({ time: result.tp1_event.ts_unix, position: 'belowBar', color: '#26a69a', shape: 'circle', text: 'TP1' });
+  if (result.status === 'sl_hit') markers.push({ time: result.ts_unix, position: 'aboveBar', color: '#ef5350', shape: 'circle', text: 'SL' });
+  if (result.status === 'tp2_hit') markers.push({ time: result.ts_unix, position: 'belowBar', color: '#26a69a', shape: 'circle', text: 'TP2' });
+  if (result.status === 'ambiguous') markers.push({ time: result.ts_unix, position: 'inBar', color: '#fbbf24', shape: 'circle', text: 'AMBIG' });
+  markers.sort((a,b) => a.time - b.time);
+  candles.setMarkers(markers);
+}
+
+function verdictHtml(trade, result, source, barsCount) {
+  const labels = { sl_hit:'SL HIT', tp1_only:'TP1 ONLY', tp2_hit:'TP2 HIT', ambiguous:'AMBIGUOUS', open:'STILL OPEN', no_data:'NO DATA' };
+  const cls = 'v-' + result.status;
+  let html = `<span class="verdict ${cls}">${labels[result.status] || result.status}</span> `;
+  html += `<span class="meta">${result.message}</span><br/>`;
+  html += `<span class="meta"><b>${trade.side}</b> #${trade.number ?? '?'} · entry <b>${trade.entry}</b> · SL <b>${trade.sl}</b> · TP1 <b>${trade.tp1}</b>`;
+  if (trade.tp2 != null) html += ` · TP2 <b>${trade.tp2}</b>`;
+  html += ` · source <b>${source}</b> · bars <b>${barsCount}</b>`;
+  if (trade.declared_result) html += ` · declared <b>${trade.declared_result}</b>`;
+  html += `</span>`;
+  return html;
+}
+
+// ---------- submit handler ----------
+document.getElementById('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  submit.disabled = true;
+  statusEl.innerHTML = '<span class="meta">Parsing…</span>';
+  rawEl.textContent = '';
+  ensureChart();
+  clearOverlays();
+  candles.setData([]);
+
+  const fd = new FormData(e.target);
+  const text = (fd.get('text') || '').trim();
+  const offset = parseFloat(fd.get('broker_offset')) || 0;
+  const fallbackDate = (fd.get('fallback_date') || '').trim() || null;
+  const file = fd.get('csv_file');
+
+  try {
+    if (!text) throw new Error("paste a trade first");
+    if (!file || !file.size) throw new Error("drop a PuPrime MT4/MT5 1m CSV (XAUUSD) — this offline page can't fetch live data");
+
+    const trade = parseTrade(text, offset, fallbackDate);
+    const entrySecs = brokerToUtcSeconds(trade.broker_date, trade.broker_time, offset);
+
+    const csvText = await file.text();
+    const allBars = parseCsv(csvText, offset);
+    if (!allBars.length) throw new Error("CSV had no usable rows");
+
+    const windowBars = allBars.filter(b => b.time >= entrySecs - 1800 && b.time <= entrySecs + 2 * 24 * 3600);
+    if (!windowBars.length) {
+      throw new Error(`CSV has no bars near entry time ${new Date(entrySecs*1000).toISOString()}. Range in CSV: ${new Date(allBars[0].time*1000).toISOString()} to ${new Date(allBars[allBars.length-1].time*1000).toISOString()}. Check broker offset and date.`);
+    }
+
+    const result = walk(trade, windowBars, entrySecs);
+
+    candles.setData(windowBars);
+    drawZones(trade, windowBars);
+    drawLevels(trade);
+    drawMarkers(trade, entrySecs, result);
+    chart.timeScale().fitContent();
+
+    statusEl.innerHTML = verdictHtml(trade, result, file.name, windowBars.length);
+    rawEl.textContent = JSON.stringify({ trade, entry_unix: entrySecs, result, bar_count: windowBars.length }, null, 2);
+  } catch (err) {
+    statusEl.innerHTML = '<div class="err">' + err.message + '</div>';
+    console.error(err);
+  } finally {
+    submit.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
